@@ -90,6 +90,7 @@ async function runGeminiServiceTests(): Promise<void> {
       prompt: "SENSITIVE_PROMPT",
       maxOutputTokens: 1024,
       timeoutMs: 45_000,
+      responseMimeType: "application/json",
     })
     assert.equal(successEvents.length, 1)
     assert.equal(successEvents[0].event, "success")
