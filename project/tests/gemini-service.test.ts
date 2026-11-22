@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { GoogleGenAI } from "@google/genai"
+import { GenerateContentResponse, GoogleGenAI } from "@google/genai"
 import {
   DEFAULT_GEMINI_MODEL,
   GeminiServiceError,
@@ -71,6 +71,28 @@ async function runGeminiServiceTests(): Promise<void> {
     assert.strictEqual(firstClient, secondClient)
 
     process.env.GEMINI_MODEL = "test-model"
+    let sdkResponseMimeType: string | undefined
+    const originalGenerateContent = firstClient.models.generateContent
+    firstClient.models.generateContent = async (request) => {
+      sdkResponseMimeType = request.config?.responseMimeType
+      const response = new GenerateContentResponse()
+      response.candidates = [
+        { content: { parts: [{ text: "SDK config test response" }] } },
+      ]
+      return response
+    }
+    try {
+      assert.equal(
+        await generateGeminiText("SDK config test prompt", {
+          logger: () => {},
+        }),
+        "SDK config test response",
+      )
+    } finally {
+      firstClient.models.generateContent = originalGenerateContent
+    }
+    assert.equal(sdkResponseMimeType, "application/json")
+
     let capturedRequest: Parameters<GeminiTextGenerator>[0] | undefined
     const successEvents: DiagnosticEvent[] = []
     const successfulGenerator: GeminiTextGenerator = async (request) => {

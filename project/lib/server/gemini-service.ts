@@ -231,6 +231,7 @@ function generateWithSdk(
       model: request.model,
       contents: request.prompt,
       config: {
+        responseMimeType: "application/json",
         maxOutputTokens: request.maxOutputTokens,
         httpOptions: { timeout: request.timeoutMs },
       },
