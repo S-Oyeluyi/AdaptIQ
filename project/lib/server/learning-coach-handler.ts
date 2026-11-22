@@ -17,11 +17,12 @@ import {
   type TargetedPracticeRequest,
 } from "../learning-ai-schemas"
 import {
-  generateGeminiText,
-  GeminiServiceError,
-  type GeminiTextGenerator,
-  type GeminiDiagnosticsLogger,
-} from "./gemini-service"
+  generateOpenRouterText,
+  OpenRouterServiceError,
+  type OpenRouterTextGenerator,
+  type OpenRouterDiagnosticsLogger,
+  type OpenRouterGenerationDiagnostics,
+} from "./openrouter-service"
 
 export const MAX_REQUEST_BODY_BYTES = 32_768 // 32 KB limit
 export const DEFAULT_RATE_LIMIT_MAX_REQUESTS = 20 // 20 requests per minute per IP
@@ -247,10 +248,10 @@ Instructions:
 }
 
 export interface LearningCoachHandlerOptions {
-  generator?: GeminiTextGenerator
+  generator?: OpenRouterTextGenerator
   timeoutMs?: number
   rateLimiter?: InMemoryRateLimiter | null
-  logger?: GeminiDiagnosticsLogger
+  logger?: OpenRouterDiagnosticsLogger
 }
 
 export async function handleLearningCoachRequest(
@@ -353,16 +354,24 @@ export async function handleLearningCoachRequest(
     prompt = buildRecommendationExplanationPrompt(reqData, topic)
   }
 
-  // 7. Invoke Gemini service
-  let geminiText: string
+  // 7. Invoke OpenRouter service
+  const diagnosticsRef: { current: OpenRouterGenerationDiagnostics | null } = {
+    current: null,
+  }
+  const coachLogger: OpenRouterDiagnosticsLogger = (event, diagnostics) => {
+    diagnosticsRef.current = diagnostics
+    options.logger?.(event, diagnostics)
+  }
+
+  let generatedText: string
   try {
-    geminiText = await generateGeminiText(prompt, {
+    generatedText = await generateOpenRouterText(prompt, {
       generator: options.generator,
       timeoutMs: options.timeoutMs,
-      logger: options.logger,
+      logger: coachLogger,
     })
   } catch (error) {
-    if (error instanceof GeminiServiceError) {
+    if (error instanceof OpenRouterServiceError) {
       switch (error.code) {
         case "missing-api-key":
           return Response.json(
@@ -399,11 +408,20 @@ export async function handleLearningCoachRequest(
     )
   }
 
-  // 8. Extract JSON from Gemini response
+  // 8. Extract JSON from OpenRouter response
   let aiData: unknown
   try {
-    aiData = extractJson(geminiText)
+    aiData = extractJson(generatedText)
+    const struct = diagnosticsRef.current?.responseStructure
+    if (struct) {
+      struct.jsonExtractionSucceeded = true
+    }
   } catch {
+    const struct = diagnosticsRef.current?.responseStructure
+    if (struct) {
+      struct.jsonExtractionSucceeded = false
+      struct.zodValidationSucceeded = false
+    }
     return Response.json(
       { error: "AI service returned an unparseable response." },
       { status: 502 },
@@ -413,6 +431,10 @@ export async function handleLearningCoachRequest(
   // 9. Validate extracted JSON against task-specific response schema
   if (reqData.task === "mistake-explanation") {
     const validated = mistakeExplanationResponseSchema.safeParse(aiData)
+    const struct = diagnosticsRef.current?.responseStructure
+    if (struct) {
+      struct.zodValidationSucceeded = validated.success
+    }
     if (!validated.success) {
       return Response.json(
         { error: "AI service returned an invalid response structure." },
@@ -424,6 +446,10 @@ export async function handleLearningCoachRequest(
 
   if (reqData.task === "targeted-practice") {
     const validated = targetedPracticeResponseSchema.safeParse(aiData)
+    const struct = diagnosticsRef.current?.responseStructure
+    if (struct) {
+      struct.zodValidationSucceeded = validated.success
+    }
     if (!validated.success) {
       return Response.json(
         { error: "AI service returned an invalid response structure." },
@@ -435,6 +461,10 @@ export async function handleLearningCoachRequest(
 
   // recommendation-explanation
   const validated = recommendationExplanationResponseSchema.safeParse(aiData)
+  const struct = diagnosticsRef.current?.responseStructure
+  if (struct) {
+    struct.zodValidationSucceeded = validated.success
+  }
   if (!validated.success) {
     return Response.json(
       { error: "AI service returned an invalid response structure." },

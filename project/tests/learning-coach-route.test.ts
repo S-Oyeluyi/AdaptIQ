@@ -12,9 +12,9 @@ import {
   extractJson,
 } from "../lib/server/learning-coach-handler"
 import {
-  GeminiServiceError,
-  type GeminiTextGenerator,
-} from "../lib/server/gemini-service"
+  OpenRouterServiceError,
+  type OpenRouterTextGenerator,
+} from "../lib/server/openrouter-service"
 
 function createJsonRequest(
   body: unknown,
@@ -42,7 +42,7 @@ async function runLearningCoachRouteTests(): Promise<void> {
   // 1. Mistake explanation — valid operation
   console.log("[1] Testing mistake explanation valid operation...")
   {
-    const mockGenerator: GeminiTextGenerator = async () => ({
+    const mockGenerator: OpenRouterTextGenerator = async () => ({
       text: JSON.stringify({
         explanation: "You added 5 instead of subtracting 5 from both sides of the equation.",
         nextStep: "Remember to apply the inverse operation to isolate the variable.",
@@ -70,7 +70,7 @@ async function runLearningCoachRouteTests(): Promise<void> {
   // 2. Targeted practice generation — valid operation
   console.log("[2] Testing targeted practice valid operation...")
   {
-    const mockGenerator: GeminiTextGenerator = async () => ({
+    const mockGenerator: OpenRouterTextGenerator = async () => ({
       text: JSON.stringify({
         questions: [
           {
@@ -111,7 +111,7 @@ async function runLearningCoachRouteTests(): Promise<void> {
   // 3. Recommendation explanation — valid operation
   console.log("[3] Testing recommendation explanation valid operation...")
   {
-    const mockGenerator: GeminiTextGenerator = async () => ({
+    const mockGenerator: OpenRouterTextGenerator = async () => ({
       text: JSON.stringify({
         explanation:
           "Linear Equations are essential building blocks for all algebra topics. Strengthening this will boost overall performance.",
@@ -141,7 +141,7 @@ async function runLearningCoachRouteTests(): Promise<void> {
   // 4. Markdown code fence JSON extraction
   console.log("[4] Testing JSON extraction from markdown code fences...")
   {
-    const mockGenerator: GeminiTextGenerator = async () => ({
+    const mockGenerator: OpenRouterTextGenerator = async () => ({
       text: "```json\n" + JSON.stringify({
         explanation: "Extracted correctly from markdown code fence.",
       }) + "\n```",
@@ -167,17 +167,13 @@ async function runLearningCoachRouteTests(): Promise<void> {
     assert.equal(data.explanation, "Extracted correctly from markdown code fence.")
   }
 
-  // 4b. JSON extraction resilience: trailing commas, BOM, and responseMimeType verification
-  console.log("[4b] Testing JSON extraction resilience and responseMimeType verification...")
+  // 4b. JSON extraction resilience: trailing commas, BOM, and commentary
+  console.log("[4b] Testing JSON extraction resilience...")
   {
-    let receivedMimeType: string | undefined
-    const mockGenerator: GeminiTextGenerator = async (request) => {
-      receivedMimeType = request.responseMimeType
-      return {
-        // Includes BOM, trailing comma, and commentary outside JSON
-        text: "\uFEFFHere is your feedback:\n{\n  \"explanation\": \"Well done.\",\n  \"nextStep\": \"Practice further.\",\n}\nHope this helps!",
-      }
-    }
+    const mockGenerator: OpenRouterTextGenerator = async () => ({
+      // Includes BOM, trailing comma, and commentary outside JSON
+      text: "\uFEFFHere is your feedback:\n{\n  \"explanation\": \"Well done.\",\n  \"nextStep\": \"Practice further.\",\n}\nHope this helps!",
+    })
 
     const request = createJsonRequest({
       task: "mistake-explanation",
@@ -192,7 +188,6 @@ async function runLearningCoachRouteTests(): Promise<void> {
     })
 
     assert.equal(response.status, 200)
-    assert.equal(receivedMimeType, "application/json")
     const data = await response.json()
     assert.equal(data.explanation, "Well done.")
     assert.equal(data.nextStep, "Practice further.")
@@ -294,10 +289,10 @@ async function runLearningCoachRouteTests(): Promise<void> {
     assert.equal(badTopicRes.status, 400)
   }
 
-  // 8. Malformed Gemini JSON response
-  console.log("[8] Testing malformed Gemini output...")
+  // 8. Malformed OpenRouter JSON response
+  console.log("[8] Testing malformed OpenRouter output...")
   {
-    const mockGenerator: GeminiTextGenerator = async () => ({
+    const mockGenerator: OpenRouterTextGenerator = async () => ({
       text: "Sorry, I am not able to generate JSON right now.",
     })
 
@@ -325,7 +320,7 @@ async function runLearningCoachRouteTests(): Promise<void> {
   console.log("[9] Testing invalid generated question structures from AI...")
   {
     // Questions array has only 3 options instead of 4
-    const mockGenerator: GeminiTextGenerator = async () => ({
+    const mockGenerator: OpenRouterTextGenerator = async () => ({
       text: JSON.stringify({
         questions: [
           {
@@ -355,11 +350,11 @@ async function runLearningCoachRouteTests(): Promise<void> {
     assert.ok(data.error.includes("invalid response structure"))
   }
 
-  // 10. Gemini API failure and missing key handling
-  console.log("[10] Testing Gemini API failure and missing key...")
+  // 10. OpenRouter API failure and missing key handling
+  console.log("[10] Testing OpenRouter API failure and missing key...")
   {
-    const failureGenerator: GeminiTextGenerator = async () => {
-      throw new GeminiServiceError("api-failure", "Internal upstream error")
+    const failureGenerator: OpenRouterTextGenerator = async () => {
+      throw new OpenRouterServiceError("api-failure", "Internal upstream error")
     }
 
     const request = createJsonRequest({
@@ -384,8 +379,8 @@ async function runLearningCoachRouteTests(): Promise<void> {
     assert.equal(JSON.stringify(data).includes("Internal upstream error"), false)
 
     // Missing API key error -> 503
-    const missingKeyGenerator: GeminiTextGenerator = async () => {
-      throw new GeminiServiceError("missing-api-key", "API key missing")
+    const missingKeyGenerator: OpenRouterTextGenerator = async () => {
+      throw new OpenRouterServiceError("missing-api-key", "API key missing")
     }
     const missingKeyReq = createJsonRequest({
       task: "recommendation-explanation",
@@ -445,10 +440,10 @@ async function runLearningCoachRouteTests(): Promise<void> {
   }
 
   // 11. Timeout handling
-  console.log("[11] Testing Gemini timeout handling...")
+  console.log("[11] Testing OpenRouter timeout handling...")
   {
-    const timeoutGenerator: GeminiTextGenerator = async () => {
-      throw new GeminiServiceError("timeout", "Generation timed out")
+    const timeoutGenerator: OpenRouterTextGenerator = async () => {
+      throw new OpenRouterServiceError("timeout", "Generation timed out")
     }
 
     const request = createJsonRequest({
@@ -475,7 +470,7 @@ async function runLearningCoachRouteTests(): Promise<void> {
   console.log("[12] Testing per-IP rate limiting...")
   {
     const customLimiter = new InMemoryRateLimiter({ maxRequests: 2, windowMs: 60_000 })
-    const mockGenerator: GeminiTextGenerator = async () => ({
+    const mockGenerator: OpenRouterTextGenerator = async () => ({
       text: JSON.stringify({ explanation: "Success" }),
     })
 
