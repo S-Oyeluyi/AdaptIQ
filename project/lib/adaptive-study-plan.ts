@@ -258,13 +258,70 @@ function allocateDailyGoal(
 
   const minutesPerUnit = dailyGoalMinutes / totalUnits
 
+  interface AllocationItem {
+    topicId: string
+    kind: "focus" | "develop" | "reinforce"
+    priority: number
+    raw: number
+    allocated: number
+  }
+
+  const items: AllocationItem[] = []
+
   for (const item of focusItems) {
     const raw = minutesPerUnit * 2
-    result.set(item.topicId, Math.max(1, Math.min(MAX_ITEM_MINUTES, Math.round(raw))))
+    const rounded = Math.max(1, Math.min(MAX_ITEM_MINUTES, Math.round(raw)))
+    items.push({
+      topicId: item.topicId,
+      kind: item.kind as "focus" | "develop",
+      priority: item.priority,
+      raw,
+      allocated: rounded,
+    })
   }
+
   for (const item of reinforceItems) {
     const raw = minutesPerUnit * 1
-    result.set(item.topicId, Math.max(1, Math.min(MAX_ITEM_MINUTES, Math.round(raw))))
+    const rounded = Math.max(1, Math.min(MAX_ITEM_MINUTES, Math.round(raw)))
+    items.push({
+      topicId: item.topicId,
+      kind: "reinforce",
+      priority: item.priority,
+      raw,
+      allocated: rounded,
+    })
+  }
+
+  // Deficit adjustment: ensure total allocated minutes NEVER exceed the daily goal due to rounding.
+  let currentTotal = items.reduce((sum, it) => sum + it.allocated, 0)
+  if (currentTotal > dailyGoalMinutes) {
+    // Sort items to deduct minutes from:
+    // 1. Largest upward rounding error (allocated - raw) descending
+    // 2. Reinforce items before focus/develop items
+    // 3. Lowest urgency (higher priority number) descending
+    const deductionOrder = [...items].sort((a, b) => {
+      const deltaA = a.allocated - a.raw
+      const deltaB = b.allocated - b.raw
+      if (Math.abs(deltaA - deltaB) > 1e-6) {
+        return deltaB - deltaA
+      }
+      if (a.kind !== b.kind) {
+        return a.kind === "reinforce" ? -1 : 1
+      }
+      return b.priority - a.priority
+    })
+
+    for (const entry of deductionOrder) {
+      if (currentTotal <= dailyGoalMinutes) break
+      if (entry.allocated > 1) {
+        entry.allocated -= 1
+        currentTotal -= 1
+      }
+    }
+  }
+
+  for (const entry of items) {
+    result.set(entry.topicId, entry.allocated)
   }
 
   return result

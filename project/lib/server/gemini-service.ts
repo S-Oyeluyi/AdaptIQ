@@ -57,6 +57,7 @@ export interface GeminiTextGenerationRequest {
   prompt: string
   maxOutputTokens: number
   timeoutMs: number
+  responseMimeType?: string
 }
 
 export interface GeminiTextGenerationResult {
@@ -71,6 +72,7 @@ export interface GeminiGenerationOptions {
   generator?: GeminiTextGenerator
   timeoutMs?: number
   logger?: GeminiDiagnosticsLogger
+  responseMimeType?: string
 }
 
 let cachedClient: GoogleGenAI | undefined
@@ -231,9 +233,9 @@ function generateWithSdk(
       model: request.model,
       contents: request.prompt,
       config: {
-        responseMimeType: "application/json",
         maxOutputTokens: request.maxOutputTokens,
         httpOptions: { timeout: request.timeoutMs },
+        responseMimeType: request.responseMimeType ?? "application/json",
       },
     })
     .then((response) => ({ text: response.text }))
@@ -284,6 +286,7 @@ export async function generateGeminiText(
 
   const model = getModelIdentifier()
   const generator = options.generator ?? generateWithSdk
+  const responseMimeType = options.responseMimeType ?? "application/json"
   const startedAt = Date.now()
   const elapsedMs = () => Math.max(0, Date.now() - startedAt)
 
@@ -296,6 +299,7 @@ export async function generateGeminiText(
           prompt: normalizedPrompt,
           maxOutputTokens: MAX_GEMINI_OUTPUT_TOKENS,
           timeoutMs,
+          responseMimeType,
         }),
       timeoutMs + 2_000,
     )

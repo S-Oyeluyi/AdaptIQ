@@ -167,6 +167,37 @@ async function runLearningCoachRouteTests(): Promise<void> {
     assert.equal(data.explanation, "Extracted correctly from markdown code fence.")
   }
 
+  // 4b. JSON extraction resilience: trailing commas, BOM, and responseMimeType verification
+  console.log("[4b] Testing JSON extraction resilience and responseMimeType verification...")
+  {
+    let receivedMimeType: string | undefined
+    const mockGenerator: GeminiTextGenerator = async (request) => {
+      receivedMimeType = request.responseMimeType
+      return {
+        // Includes BOM, trailing comma, and commentary outside JSON
+        text: "\uFEFFHere is your feedback:\n{\n  \"explanation\": \"Well done.\",\n  \"nextStep\": \"Practice further.\",\n}\nHope this helps!",
+      }
+    }
+
+    const request = createJsonRequest({
+      task: "mistake-explanation",
+      assessmentId: assessment.id,
+      questionId: question.id,
+      selectedOptionIndex: incorrectOptionIndex,
+    })
+
+    const response = await handleLearningCoachRequest(request, {
+      generator: mockGenerator,
+      rateLimiter: null,
+    })
+
+    assert.equal(response.status, 200)
+    assert.equal(receivedMimeType, "application/json")
+    const data = await response.json()
+    assert.equal(data.explanation, "Well done.")
+    assert.equal(data.nextStep, "Practice further.")
+  }
+
   // 5. Invalid request bodies
   console.log("[5] Testing invalid request bodies (malformed JSON, missing fields, extra fields)...")
   {

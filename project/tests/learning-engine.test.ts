@@ -184,6 +184,20 @@ const geomPlan = generateStudyPlan(geomFp)
 const anglesRec = geomPlan.recommendations.find((r) => r.topicId === "angles-and-lines")!
 assert.equal(anglesRec.kind, "focus", "0% mastery on angles-and-lines classified as focus")
 assert.equal(anglesRec.priorityLabel, "High priority", "Focus items receive High priority")
+
+// 4c. Daily goal duration allocation does not exceed goal due to rounding
+for (const goal of [15, 30, 45, 60] as const) {
+  const planWithGoal = generateStudyPlan(geomFp, undefined, goal)
+  assert.ok(
+    planWithGoal.estimatedMinutes <= goal,
+    `Estimated minutes (${planWithGoal.estimatedMinutes}) must not exceed daily goal (${goal})`,
+  )
+  for (const item of planWithGoal.recommendations) {
+    if (item.kind !== "run-diagnostic") {
+      assert.ok(item.suggestedMinutes !== null && item.suggestedMinutes >= 1)
+    }
+  }
+}
 console.log("✓ Adaptive Study Plan consistency and safeguards verified")
 
 // ---------------------------------------------------------------------------

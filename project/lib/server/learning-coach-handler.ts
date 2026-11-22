@@ -20,6 +20,7 @@ import {
   generateGeminiText,
   GeminiServiceError,
   type GeminiTextGenerator,
+  type GeminiDiagnosticsLogger,
 } from "./gemini-service"
 
 export const MAX_REQUEST_BODY_BYTES = 32_768 // 32 KB limit
@@ -103,33 +104,41 @@ export function getClientIp(request: Request): string {
   return "127.0.0.1"
 }
 
-export function extractJson(rawText: string): unknown {
-  const trimmed = rawText.trim()
-
+function tryParseJson(text: string): unknown | null {
   try {
-    return JSON.parse(trimmed)
+    return JSON.parse(text)
   } catch {
-    const codeBlockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
-    if (codeBlockMatch) {
-      try {
-        return JSON.parse(codeBlockMatch[1].trim())
-      } catch {
-        // Fall through to brace matching
-      }
+    // Attempt parsing after removing trailing commas before closing braces/brackets
+    try {
+      const stripped = text.replace(/,\s*([}\]])/g, "$1")
+      return JSON.parse(stripped)
+    } catch {
+      return null
     }
-
-    const firstBrace = trimmed.indexOf("{")
-    const lastBrace = trimmed.lastIndexOf("}")
-    if (firstBrace !== -1 && lastBrace > firstBrace) {
-      try {
-        return JSON.parse(trimmed.slice(firstBrace, lastBrace + 1))
-      } catch {
-        // Fall through
-      }
-    }
-
-    throw new Error("Could not parse JSON from AI response.")
   }
+}
+
+export function extractJson(rawText: string): unknown {
+  const trimmed = rawText.trim().replace(/^\uFEFF/, "")
+
+  const direct = tryParseJson(trimmed)
+  if (direct !== null) return direct
+
+  const codeBlockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
+  if (codeBlockMatch) {
+    const parsedBlock = tryParseJson(codeBlockMatch[1].trim())
+    if (parsedBlock !== null) return parsedBlock
+  }
+
+  const firstBrace = trimmed.indexOf("{")
+  const lastBrace = trimmed.lastIndexOf("}")
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    const candidate = trimmed.slice(firstBrace, lastBrace + 1)
+    const parsedCandidate = tryParseJson(candidate)
+    if (parsedCandidate !== null) return parsedCandidate
+  }
+
+  throw new Error("Could not parse JSON from AI response.")
 }
 
 function buildMistakeExplanationPrompt(
@@ -241,6 +250,7 @@ export interface LearningCoachHandlerOptions {
   generator?: GeminiTextGenerator
   timeoutMs?: number
   rateLimiter?: InMemoryRateLimiter | null
+  logger?: GeminiDiagnosticsLogger
 }
 
 export async function handleLearningCoachRequest(
@@ -349,6 +359,7 @@ export async function handleLearningCoachRequest(
     geminiText = await generateGeminiText(prompt, {
       generator: options.generator,
       timeoutMs: options.timeoutMs,
+      logger: options.logger,
     })
   } catch (error) {
     if (error instanceof GeminiServiceError) {
