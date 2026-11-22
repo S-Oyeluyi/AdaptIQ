@@ -1071,14 +1071,14 @@ function Fingerprint({
           <div className="topic-evidence-list">
             {fp.topics.map((t) => {
               const color = masteryColor(t.masteryEstimate)
-              const label = masteryLabel(t.masteryEstimate)
               const hasData = t.evidenceStatus === "sufficient"
+              const label = hasData ? masteryLabel(t.masteryEstimate) : "Awaiting diagnostic"
               const scoreDisplay = hasData ? Math.round(t.masteryEstimate!) : "—"
               const assessmentId = topicToAssessment[t.topicId]
 
               return (
-                <article className="evidence-row" key={t.topicId}>
-                  <div className={`evidence-score ${hasData ? color : "muted"}`}>
+                <article className={`evidence-row ${hasData ? "" : "is-unassessed"}`} key={t.topicId}>
+                  <div className={`evidence-score ${hasData ? color : "muted"}`} title={hasData ? `${scoreDisplay}% mastery` : "Awaiting diagnostic assessment"}>
                     {scoreDisplay}
                   </div>
                   <div className="evidence-info">
@@ -1098,7 +1098,7 @@ function Fingerprint({
                       </>
                     ) : (
                       <>
-                        <ProgressBar value={0} color="muted"/>
+                        <div className="progress-track unassessed-track" role="note" aria-label="Awaiting diagnostic assessment" title="No diagnostic evidence yet"/>
                         <p className="fp-no-evidence-note">
                           <CircleHelp/>
                           No assessment data yet.{" "}
@@ -1120,7 +1120,9 @@ function Fingerprint({
                         {t.masteryEstimate! >= 50 ? <ArrowUpRight/> : <ArrowDownRight/>}
                         {Math.round(t.masteryEstimate!)} pts
                       </>
-                    ) : "N/A"}
+                    ) : (
+                      <span className="unassessed-pill">Awaiting test</span>
+                    )}
                   </div>
                 </article>
               )

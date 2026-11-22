@@ -20,6 +20,7 @@ import {
   generateGeminiText,
   GeminiServiceError,
   type GeminiTextGenerator,
+  type GeminiDiagnosticsLogger,
 } from "./gemini-service"
 
 export const MAX_REQUEST_BODY_BYTES = 32_768 // 32 KB limit
@@ -241,6 +242,7 @@ export interface LearningCoachHandlerOptions {
   generator?: GeminiTextGenerator
   timeoutMs?: number
   rateLimiter?: InMemoryRateLimiter | null
+  logger?: GeminiDiagnosticsLogger
 }
 
 export async function handleLearningCoachRequest(
@@ -349,6 +351,7 @@ export async function handleLearningCoachRequest(
     geminiText = await generateGeminiText(prompt, {
       generator: options.generator,
       timeoutMs: options.timeoutMs,
+      logger: options.logger,
     })
   } catch (error) {
     if (error instanceof GeminiServiceError) {
