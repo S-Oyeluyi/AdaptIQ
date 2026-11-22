@@ -186,7 +186,7 @@ function Overview({
   const evidencedTopics = fp.topics.filter((t) => t.evidenceStatus === "sufficient")
   const canRenderRadar = evidencedTopics.length >= 3
   const radarChartData = evidencedTopics.map((t) => ({
-    topic: t.topicName.length > 13 ? t.topicName.slice(0, 11) + "â€¦" : t.topicName,
+    topic: t.topicName.length > 13 ? t.topicName.slice(0, 11) + "…" : t.topicName,
     mastery: Math.round(t.masteryEstimate!),
     full: 100,
   }))
@@ -224,7 +224,7 @@ function Overview({
       <div className="stats-grid">
         <StatCard
           label="Overall mastery"
-          value={fp.overallMastery !== null ? `${Math.round(fp.overallMastery)}%` : "â€”"}
+          value={fp.overallMastery !== null ? `${Math.round(fp.overallMastery)}%` : "—"}
           change={fp.overallMastery !== null ? masteryLabel(fp.overallMastery) : "No evidence"}
           detail={fp.overallMastery !== null ? `${fp.topicsWithEvidence} of ${fp.topics.length} topics assessed` : "Awaiting first diagnostic"}
           icon={Gauge}
@@ -404,7 +404,7 @@ function Overview({
                     <ProgressBar value={scoreVal} color={scoreColor}/>
                   </div>
                   <strong className={`topic-score ${hasEv ? "" : "muted"}`}>
-                    {hasEv ? `${scoreVal}%` : "â€”"}
+                    {hasEv ? `${scoreVal}%` : "—"}
                   </strong>
                 </div>
               )
@@ -576,21 +576,21 @@ function Assessments({
             <ChevronLeft/> All assessments
           </button>
           <span className="assessment-session">
-            <span className="live-dot"/> Diagnostic Â· {currentDef?.title || "Assessment"}
+            <span className="live-dot"/> Diagnostic · {currentDef?.title || "Assessment"}
           </span>
         </div>
 
         {finished && evaluation ? (
           <div className="result-card panel">
             <div className="result-check"><Check/></div>
-            <div className="eyebrow">ASSESSMENT COMPLETE Â· {evaluation.assessmentTitle.toUpperCase()}</div>
+            <div className="eyebrow">ASSESSMENT COMPLETE · {evaluation.assessmentTitle.toUpperCase()}</div>
             <h2>Your results are ready.</h2>
             <p>Your responses have been scored using weighted evidence across curriculum topics.</p>
 
             <div className="result-score">
               <b>{Math.round(evaluation.overallScore)}%</b>
               <span>
-                Overall weighted score Â· {evaluation.correctCount} of {evaluation.totalQuestions} questions correct ({evaluation.answeredQuestions} answered)
+                Overall weighted score · {evaluation.correctCount} of {evaluation.totalQuestions} questions correct ({evaluation.answeredQuestions} answered)
               </span>
               <span className="result-score-sub">
                 Earned {Math.round(evaluation.earnedWeightedScore)} of {Math.round(evaluation.maximumWeightedScore)} maximum weighted points
@@ -642,12 +642,12 @@ function Assessments({
                     </span>
                     <div>
                       <div className="review-question-header">
-                        <b>Question {idx + 1} Â· {q?.topicLabel || resp.topicId}</b>
-                        <span className="review-meta">{q?.difficulty.toUpperCase()} Â· {resp.earnedScore}/{resp.maxScore} pts</span>
+                        <b>Question {idx + 1} · {q?.topicLabel || resp.topicId}</b>
+                        <span className="review-meta">{q?.difficulty.toUpperCase()} · {resp.earnedScore}/{resp.maxScore} pts</span>
                       </div>
                       <span>
                         <b>Your answer:</b> {isAnswered && q ? q.options[resp.selectedOptionIndex!] : <em className="unanswered-text">Unanswered (skipped)</em>}
-                        {" Â· "}
+                        {" · "}
                         <b>Correct answer:</b> {q ? q.options[q.correctIndex] : "N/A"}
                       </span>
                       {q?.explanation && (
@@ -696,7 +696,7 @@ function Assessments({
             <div className="question-card panel">
               <div className="question-topic">
                 <span className="topic-pill">{currentQ.topicLabel}</span>
-                <span className="difficulty"><span/> {currentQ.difficulty.toUpperCase()} Â· {currentQ.weight} pts</span>
+                <span className="difficulty"><span/> {currentQ.difficulty.toUpperCase()} · {currentQ.weight} pts</span>
               </div>
               <h3>{currentQ.text}</h3>
               <div className="answer-list" role="radiogroup" aria-label="Answer choices">
@@ -764,7 +764,7 @@ function Assessments({
                       </span>
                     ) : (
                       <span className="all-answered-note">
-                        âœ“ All questions answered! Your responses will be evaluated using weighted scoring across topics.
+                        ✓ All questions answered! Your responses will be evaluated using weighted scoring across topics.
                       </span>
                     )}
                   </p>
@@ -820,7 +820,7 @@ function Assessments({
             Start diagnostic <ArrowRight/>
           </button>
           <div className="banner-meta">
-            <span><Clock3/> 12â€“15 min</span>
+            <span><Clock3/> 12–15 min</span>
             <span><Target/> 6 questions</span>
             <span><Sparkles/> Updates your profile</span>
           </div>
@@ -907,7 +907,7 @@ function Assessments({
                   <div className="recent-icon"><FlaskConical/></div>
                   <div className="recent-name">
                     <b>{att.assessmentTitle}</b>
-                    <span>Today at {dateStr} Â· {att.answeredQuestions} of {att.totalQuestions} answered ({att.correctCount} correct)</span>
+                    <span>Today at {dateStr} · {att.answeredQuestions} of {att.totalQuestions} answered ({att.correctCount} correct)</span>
                   </div>
                   <strong>{Math.round(att.overallScore)}%</strong>
                   <span className="result-status">{isStrong ? "Strong result" : isModerate ? "Developing" : "Needs review"}</span>
@@ -934,7 +934,7 @@ function Assessments({
             <div className="recent-icon"><FlaskConical/></div>
             <div className="recent-name">
               <b>Algebra readiness</b>
-              <span>Baseline sample Â· 6 questions</span>
+              <span>Baseline sample · 6 questions</span>
             </div>
             <strong>82%</strong>
             <span className="result-status">Sample result</span>
@@ -956,7 +956,7 @@ function Fingerprint({
   const hasEvidence = fp.overallMastery !== null
 
   // Build radar data: topics with evidence use their mastery; others use 0
-  // so the chart shape still renders â€” the legend explains the limitation.
+  // so the chart shape still renders — the legend explains the limitation.
   const liveRadarData = fp.topics.map((t) => ({
     topic: t.topicName,
     mastery: t.masteryEstimate ?? 0,
@@ -1011,7 +1011,7 @@ function Fingerprint({
                 {Math.round(fp.overallMastery!)}<span>%</span>
               </div>
               <div className="mastery-sub">
-                Provisional estimate Â· {fp.totalAnsweredQuestions} question{fp.totalAnsweredQuestions !== 1 ? "s" : ""} answered
+                Provisional estimate · {fp.totalAnsweredQuestions} question{fp.totalAnsweredQuestions !== 1 ? "s" : ""} answered
               </div>
               <ProgressBar value={Math.round(fp.overallMastery!)} />
               <div className="hero-foot">
@@ -1021,7 +1021,7 @@ function Fingerprint({
             </>
           ) : (
             <>
-              <div className="mastery-big fp-no-data">â€”</div>
+              <div className="mastery-big fp-no-data">—</div>
               <div className="mastery-sub">Complete an assessment to generate your profile.</div>
               <ProgressBar value={0} />
               <div className="hero-foot">
@@ -1073,7 +1073,7 @@ function Fingerprint({
               const color = masteryColor(t.masteryEstimate)
               const label = masteryLabel(t.masteryEstimate)
               const hasData = t.evidenceStatus === "sufficient"
-              const scoreDisplay = hasData ? Math.round(t.masteryEstimate!) : "â€”"
+              const scoreDisplay = hasData ? Math.round(t.masteryEstimate!) : "—"
               const assessmentId = topicToAssessment[t.topicId]
 
               return (
@@ -1092,7 +1092,7 @@ function Fingerprint({
                         <p>
                           <ShieldCheck/>
                           {t.correctAnswers} of {t.answeredQuestions} question{t.answeredQuestions !== 1 ? "s" : ""} correct
-                          {" Â· "}
+                          {" · "}
                           {Math.round(t.accuracy!)}% accuracy
                         </p>
                       </>
@@ -1140,7 +1140,7 @@ function Fingerprint({
             </div>
             <p>
               Mastery estimates use your accuracy and question difficulty across answered questions.
-              Retakes use your most recent answered response â€” skipped questions never erase prior evidence.
+              Retakes use your most recent answered response — skipped questions never erase prior evidence.
               These are provisional estimates, not ability scores.
             </p>
             <div className="callout-foot"><LockKeyhole/> Your assessment data stays yours.</div>
@@ -1228,7 +1228,7 @@ function StudyPlan({ onNavigate, sessionAttempts, dailyGoalMinutes }: { onNaviga
       <SectionTitle
         eyebrow="PERSONALISED NEXT STEPS"
         title="Your study plan"
-        description="A focused path based on your assessment evidenceâ€”not a one-size-fits-all curriculum."
+        description="A focused path based on your assessment evidence—not a one-size-fits-all curriculum."
         action={<span className="plan-progress"><span>0 of 0 complete</span><ProgressBar value={0}/></span>}
       />
       <div className="sp-no-evidence-banner panel">
@@ -1236,7 +1236,7 @@ function StudyPlan({ onNavigate, sessionAttempts, dailyGoalMinutes }: { onNaviga
         <div>
           <div className="eyebrow">NO EVIDENCE YET</div>
           <h3>Complete a diagnostic to get started.</h3>
-          <p>Your personalised study plan will appear here once you complete at least one assessment. It takes around 10â€“15 minutes.</p>
+          <p>Your personalised study plan will appear here once you complete at least one assessment. It takes around 10–15 minutes.</p>
         </div>
         <button className="button button-primary" onClick={() => onNavigate("assessments")}>
           Go to Assessments <ArrowRight/>
@@ -1250,7 +1250,7 @@ function StudyPlan({ onNavigate, sessionAttempts, dailyGoalMinutes }: { onNaviga
     <SectionTitle
       eyebrow="PERSONALISED NEXT STEPS"
       title="Your study plan"
-      description="A focused path based on your assessment evidenceâ€”not a one-size-fits-all curriculum."
+      description="A focused path based on your assessment evidence—not a one-size-fits-all curriculum."
       action={<span className="plan-progress"><span>{completed.length} of {totalMain} complete</span><ProgressBar value={totalMain > 0 ? completed.length / totalMain * 100 : 0}/></span>}
     />
     <div className="plan-banner">
@@ -1258,7 +1258,7 @@ function StudyPlan({ onNavigate, sessionAttempts, dailyGoalMinutes }: { onNaviga
       <div>
         <div className="eyebrow">A LITTLE FOCUS GOES A LONG WAY</div>
         <h3>Your next {plan.estimatedMinutes} minutes, thoughtfully planned.</h3>
-        <p>{totalMain} {totalMain === 1 ? "activity" : "activities"} selected based on your diagnostic results{plan.dailyGoalMinutes ? ` Â· ${plan.dailyGoalMinutes}-min daily goal` : ""}.</p>
+        <p>{totalMain} {totalMain === 1 ? "activity" : "activities"} selected based on your diagnostic results{plan.dailyGoalMinutes ? ` · ${plan.dailyGoalMinutes}-min daily goal` : ""}.</p>
       </div>
       <div className="plan-ring"><span>{plan.estimatedMinutes}</span><small>MIN</small></div>
     </div>
@@ -1314,7 +1314,7 @@ function StudyPlan({ onNavigate, sessionAttempts, dailyGoalMinutes }: { onNaviga
                     <div className="resource-icon"><Play/></div>
                     <div>
                       <b>{item.suggestedDifficulty} practice</b>
-                      <span>Diagnostic questions Â· AdaptIQ</span>
+                      <span>Diagnostic questions · AdaptIQ</span>
                     </div>
                     <button className="button button-secondary" onClick={() => onNavigate("assessments")}>
                       {item.assessmentId ? "Reassess topic" : "Take assessment"} <ArrowRight/>
@@ -1451,7 +1451,7 @@ function Progress({
       <StatCard
         label="Questions answered"
         value={String(analytics.totalQuestionsAnswered)}
-        change={analytics.overallAccuracy !== null ? `${analytics.overallAccuracy}% acc` : "â€”"}
+        change={analytics.overallAccuracy !== null ? `${analytics.overallAccuracy}% acc` : "—"}
         detail={`${analytics.totalCorrectAnswers} correct answers`}
         icon={CheckCircle2}
         tone="green"
@@ -1550,7 +1550,7 @@ function Progress({
                 {isBaseline && <span style={{ width: `${Math.max(5, Math.min(100, t.currentScore!))}%`, opacity: 0.3 }}/>}
                 <i style={{ width: `${t.currentScore !== null ? Math.max(5, Math.min(100, t.currentScore)) : 0}%`, opacity: isUnassessed ? 0 : 1 }}/>
               </div>
-              <b>{t.currentScore !== null ? `${t.currentScore}%` : "â€”"}</b>
+              <b>{t.currentScore !== null ? `${t.currentScore}%` : "—"}</b>
               <span className={`evidence-change ${changeClass}`}>
                 {hasComparison ? (
                   t.scoreChange! > 0 ? `+${t.scoreChange}` : `${t.scoreChange}`
@@ -1586,7 +1586,7 @@ function Progress({
             </span>
             <div>
               <b>{attempt.assessmentTitle}</b>
-              <span>{attempt.dateLabel} Â· {attempt.durationFormatted} Â· {attempt.correctCount}/{attempt.answeredQuestions} correct</span>
+              <span>{attempt.dateLabel} · {attempt.durationFormatted} · {attempt.correctCount}/{attempt.answeredQuestions} correct</span>
             </div>
             <ChevronRight/>
           </div>
@@ -1661,7 +1661,7 @@ function SettingsPage({
             </div>
             <div className="settings-profile">
               <div className="avatar avatar-large">{nameInitials(preferences.displayName)}</div>
-              <div><h4>{preferences.displayName}</h4><span>Student account Â· AdaptIQ Learning</span></div>
+              <div><h4>{preferences.displayName}</h4><span>Student account · AdaptIQ Learning</span></div>
             </div>
             {editingName ? (
               <div className="settings-fields">
