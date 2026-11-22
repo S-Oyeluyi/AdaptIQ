@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "node -e \"const jiti = require('jiti')(process.cwd()); jiti('./tests/learning-engine.test.ts'); jiti('./tests/assessment-storage.test.ts'); jiti('./tests/dashboard-persistence.test.ts'); jiti('./tests/user-preferences-storage.test.ts');\""
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
