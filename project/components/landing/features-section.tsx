@@ -47,7 +47,8 @@ export function FeaturesSection() {
             visual={<CoachVisual />}
           />
           <FeatureCard
-            className="lg:col-span-2"
+            className="md:self-start lg:col-span-2"
+            visualClassName="mt-6 flex-none"
             delay={0.12}
             icon={Target}
             title="Targeted Practice"
@@ -122,7 +123,7 @@ function CoachVisual() {
 function PracticeVisual() {
   const options = ["1/2", "1/4", "1/6", "1/12"]
   return (
-    <div className="flex w-full flex-col gap-4 rounded-2xl border border-white/[0.06] bg-background/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex w-full flex-col gap-4 rounded-2xl border border-white/[0.06] bg-background/40 p-4 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex flex-col gap-1">
         <span className="font-mono text-[10px] tracking-wider text-cyan-accent uppercase">Probability</span>
         <span className="text-sm text-foreground/90">A fair die is rolled. What is P(rolling a 4)?</span>

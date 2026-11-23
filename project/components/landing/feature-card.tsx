@@ -13,6 +13,7 @@ type FeatureCardProps = {
   accent?: "cyan" | "violet"
   visual?: ReactNode
   className?: string
+  visualClassName?: string
   delay?: number
 }
 
@@ -22,7 +23,7 @@ function trackPointer(event: PointerEvent<HTMLElement>) {
   event.currentTarget.style.setProperty("--spot-y", `${event.clientY - rect.top}px`)
 }
 
-export function FeatureCard({ icon: Icon, title, description, accent = "cyan", visual, className, delay = 0 }: FeatureCardProps) {
+export function FeatureCard({ icon: Icon, title, description, accent = "cyan", visual, className, visualClassName, delay = 0 }: FeatureCardProps) {
   const isViolet = accent === "violet"
 
   return (
@@ -63,7 +64,7 @@ export function FeatureCard({ icon: Icon, title, description, accent = "cyan", v
       <p className="relative mt-4 max-w-md leading-relaxed text-pretty text-muted-foreground">{description}</p>
 
       {visual ? (
-        <div className="relative mt-8 flex flex-1 items-end" aria-hidden="true">
+        <div className={cn("relative mt-8 flex flex-1 items-end", visualClassName)} aria-hidden="true">
           {visual}
         </div>
       ) : null}
