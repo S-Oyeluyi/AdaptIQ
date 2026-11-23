@@ -148,7 +148,7 @@ export function HeroVisual() {
         </div>
       </FloatingCard>
 
-      <FloatingCard className="top-[38%] -left-16 hidden xl:flex" delay={1.5} duration={8}>
+      <FloatingCard className="-top-12 -right-6 hidden xl:flex" delay={1.5} duration={8}>
         <span className="grid size-9 place-items-center rounded-xl bg-cyan-accent/10 text-cyan-accent">
           <BrainCircuit className="size-4" aria-hidden="true" />
         </span>
