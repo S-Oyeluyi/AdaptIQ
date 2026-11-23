@@ -43,6 +43,18 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+  --color-surface: #101d2b;
+  --color-surface-raised: #142235;
+  --color-cyan-accent: #22d3ee;
+  --color-violet-accent: #a78bfa;
+  --font-landing: var(--font-landing-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-landing-display), var(--font-landing-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+html:has(.adaptiq-landing) { scroll-behavior: smooth; }
+.adaptiq-landing section[id] { scroll-margin-top: 5.5rem; }
+@media (prefers-reduced-motion: reduce) {
+  html:has(.adaptiq-landing) { scroll-behavior: auto; }
 }
 
 :root {
