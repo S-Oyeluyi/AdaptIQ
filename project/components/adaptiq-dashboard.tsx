@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import Link from "next/link"
 import {
   Activity, ArrowDownRight, ArrowRight, ArrowUpRight, Atom, Bell, BrainCircuit,
   CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight,
@@ -56,6 +57,17 @@ import {
   type UserPreferencesStorageError,
 } from "@/lib/user-preferences-storage"
 import type { DailyGoalMinutes } from "@/lib/adaptive-study-plan"
+import {
+  fetchMistakeExplanation,
+  fetchRecommendationExplanation,
+  fetchTargetedPractice,
+  LearningCoachClientError,
+} from "@/lib/client/learning-coach-client"
+import type {
+  GeneratedPracticeQuestion,
+  MistakeExplanationResponse,
+  RecommendationExplanationResponse,
+} from "@/lib/learning-ai-schemas"
 
 type Section = "overview" | "assessments" | "cognitive-fingerprint" | "study-plan" | "progress" | "settings"
 type NavTarget = Section | "Overview" | "Assessments" | "Cognitive Fingerprint" | "Study Plan" | "Adaptive Study Plan" | "Progress" | "Progress Analytics" | "Settings"
@@ -94,7 +106,18 @@ const navItems: { id: Section; label: string; icon: typeof LayoutDashboard }[] =
 ]
 
 function Logo() {
-  return <div className="brand"><div className="brand-mark"><svg viewBox="0 0 30 30" fill="none" aria-hidden="true"><path d="M15 4.5 5 23h8l2-4 2 4h8L15 4.5Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/><circle cx="15" cy="13" r="2.2" fill="currentColor"/><path d="M15 15.2v3.4M9.7 19.5l3.2-2M20.3 19.5l-3.2-2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg></div><span>Adapt<span className="brand-iq">IQ</span></span></div>
+  return (
+    <Link href="/" className="brand" aria-label="AdaptIQ home">
+      <div className="brand-mark">
+        <svg viewBox="0 0 30 30" fill="none" aria-hidden="true">
+          <path d="M15 4.5 5 23h8l2-4 2 4h8L15 4.5Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round"/>
+          <circle cx="15" cy="13" r="2.2" fill="currentColor"/>
+          <path d="M15 15.2v3.4M9.7 19.5l3.2-2M20.3 19.5l-3.2-2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+        </svg>
+      </div>
+      <span>Adapt<span className="brand-iq">IQ</span></span>
+    </Link>
+  )
 }
 
 function Sidebar({ active, onChange, open, onClose, displayName }: { active: Section; onChange: (value: Section) => void; open: boolean; onClose: () => void; displayName: string }) {
@@ -500,8 +523,50 @@ function Assessments({
   const [showConfirm, setShowConfirm] = useState(false)
   const [startTime, setStartTime] = useState<number>(Date.now())
   const [localAttempts, setLocalAttempts] = useState<AssessmentEvaluation[]>([])
+  const [aiMistakeState, setAiMistakeState] = useState<
+    Record<
+      string,
+      {
+        status: "idle" | "loading" | "success" | "error"
+        data?: MistakeExplanationResponse
+        error?: string
+      }
+    >
+  >({})
 
   const allAttempts = sessionAttempts.length > 0 ? sessionAttempts : localAttempts
+
+  const handleRequestAiMistake = async (
+    questionId: string,
+    selectedOptionIndex: number,
+  ) => {
+    if (!evaluation) return
+    setAiMistakeState((prev) => ({
+      ...prev,
+      [questionId]: { status: "loading" },
+    }))
+
+    try {
+      const res = await fetchMistakeExplanation({
+        assessmentId: evaluation.assessmentId,
+        questionId,
+        selectedOptionIndex,
+      })
+      setAiMistakeState((prev) => ({
+        ...prev,
+        [questionId]: { status: "success", data: res },
+      }))
+    } catch (err) {
+      const message =
+        err instanceof LearningCoachClientError
+          ? err.message
+          : "Could not generate AI coach explanation. Please try again."
+      setAiMistakeState((prev) => ({
+        ...prev,
+        [questionId]: { status: "error", error: message },
+      }))
+    }
+  }
 
   const startAssessment = (assessmentId: string) => {
     const def = getAssessmentById(assessmentId)
@@ -524,6 +589,7 @@ function Assessments({
     setEvalError(null)
     setShowConfirm(false)
     setStartTime(Date.now())
+    setAiMistakeState({})
   }
 
   const chooseAnswer = (questionId: string, optionIndex: number) => {
@@ -634,6 +700,7 @@ function Assessments({
                 const q = currentQuestions.find(item => item.id === resp.questionId) || currentQuestions[idx]
                 const isAnswered = resp.selectedOptionIndex !== null
                 const isCorrect = resp.isCorrect
+                const mistakeState = aiMistakeState[resp.questionId]
 
                 return (
                   <div className="answer-review-row" key={resp.questionId}>
@@ -653,6 +720,53 @@ function Assessments({
                       {q?.explanation && (
                         <div className="answer-explanation">
                           <strong>Why:</strong> {q.explanation}
+                        </div>
+                      )}
+
+                      {/* AI Mistake Explanation */}
+                      {isAnswered && !isCorrect && q && resp.selectedOptionIndex !== null && (
+                        <div className="ai-mistake-container" style={{ marginTop: 6 }}>
+                          {mistakeState?.status === "loading" && (
+                            <div className="ai-coach-box ai-coach-loading">
+                              <Sparkles className="spin-slow" />
+                              <span>AI Coach is analyzing your misconception...</span>
+                            </div>
+                          )}
+
+                          {mistakeState?.status === "error" && (
+                            <div className="ai-coach-box ai-coach-error">
+                              <div className="ai-coach-error-msg">{mistakeState.error}</div>
+                              <button
+                                className="button button-secondary button-xs"
+                                onClick={() => handleRequestAiMistake(resp.questionId, resp.selectedOptionIndex!)}
+                              >
+                                <RotateCcw /> Retry
+                              </button>
+                            </div>
+                          )}
+
+                          {mistakeState?.status === "success" && mistakeState.data && (
+                            <div className="ai-coach-box ai-coach-success">
+                              <div className="ai-coach-header">
+                                <span className="ai-coach-badge"><Sparkles /> AI LEARNING COACH</span>
+                                <span className="ai-coach-sub">Misconception Analysis</span>
+                              </div>
+                              <p className="ai-coach-explanation">{mistakeState.data.explanation}</p>
+                              <div className="ai-coach-next-step">
+                                <strong>Actionable Next Step:</strong> {mistakeState.data.nextStep}
+                              </div>
+                            </div>
+                          )}
+
+                          {(!mistakeState || mistakeState.status === "idle") && (
+                            <button
+                              className="button-ai-coach"
+                              style={{ marginTop: 4 }}
+                              onClick={() => handleRequestAiMistake(resp.questionId, resp.selectedOptionIndex!)}
+                            >
+                              <Sparkles /> Ask AI Coach why this is incorrect
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -919,6 +1033,7 @@ function Assessments({
                       setCurrentAssessmentId(att.assessmentId)
                       setCurrentQuestions(qs)
                       setEvaluation(att)
+                      setAiMistakeState({})
                       setActive(true)
                       setFinished(true)
                     }}
@@ -1210,6 +1325,111 @@ function Fingerprint({
 function StudyPlan({ onNavigate, sessionAttempts, dailyGoalMinutes }: { onNavigate: (s: NavTarget) => void; sessionAttempts: AssessmentEvaluation[]; dailyGoalMinutes: DailyGoalMinutes }) {
   const [completed, setCompleted] = useState<string[]>([])
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [aiRecState, setAiRecState] = useState<
+    Record<
+      string,
+      {
+        status: "idle" | "loading" | "success" | "error"
+        data?: RecommendationExplanationResponse
+        error?: string
+      }
+    >
+  >({})
+  const [practiceModal, setPracticeModal] = useState<{
+    topicId: string
+    topicName: string
+    difficulty: "foundational" | "core" | "advanced"
+    status: "loading" | "ready" | "error"
+    error?: string
+    questions: GeneratedPracticeQuestion[]
+    currentIndex: number
+    selectedOption: number | null
+    checked: boolean
+    userAnswers: Array<{ selectedOption: number; isCorrect: boolean }>
+    isComplete: boolean
+  } | null>(null)
+
+  const handleRequestAiRec = async (item: StudyRecommendation) => {
+    setAiRecState((prev) => ({
+      ...prev,
+      [item.topicId]: { status: "loading" },
+    }))
+
+    try {
+      const res = await fetchRecommendationExplanation({
+        topicId: item.topicId,
+        kind: item.kind,
+        reason: item.reason,
+        action: item.action,
+        suggestedDifficulty: item.suggestedDifficulty ?? null,
+        suggestedMinutes: item.suggestedMinutes ?? null,
+      })
+      setAiRecState((prev) => ({
+        ...prev,
+        [item.topicId]: { status: "success", data: res },
+      }))
+    } catch (err) {
+      const message =
+        err instanceof LearningCoachClientError
+          ? err.message
+          : "Could not generate AI coach explanation. Please try again."
+      setAiRecState((prev) => ({
+        ...prev,
+        [item.topicId]: { status: "error", error: message },
+      }))
+    }
+  }
+
+  const handleStartPractice = async (
+    topicId: string,
+    topicName: string,
+    difficulty?: string | null,
+  ) => {
+    const diff: "foundational" | "core" | "advanced" =
+      difficulty === "advanced" || difficulty === "core" ? difficulty : "foundational"
+
+    setPracticeModal({
+      topicId,
+      topicName,
+      difficulty: diff,
+      status: "loading",
+      questions: [],
+      currentIndex: 0,
+      selectedOption: null,
+      checked: false,
+      userAnswers: [],
+      isComplete: false,
+    })
+
+    try {
+      const res = await fetchTargetedPractice({
+        topicId,
+        difficulty: diff,
+        questionCount: 3,
+      })
+      setPracticeModal((prev) => {
+        if (!prev || prev.topicId !== topicId) return prev
+        return {
+          ...prev,
+          status: "ready",
+          questions: res.questions,
+        }
+      })
+    } catch (err) {
+      const message =
+        err instanceof LearningCoachClientError
+          ? err.message
+          : "Failed to generate targeted practice questions. Please try again."
+      setPracticeModal((prev) => {
+        if (!prev || prev.topicId !== topicId) return prev
+        return {
+          ...prev,
+          status: "error",
+          error: message,
+        }
+      })
+    }
+  }
 
   const fp = computeCognitiveFingerprint(sessionAttempts)
   const plan = generateStudyPlan(fp, undefined, dailyGoalMinutes)
@@ -1310,7 +1530,70 @@ function StudyPlan({ onNavigate, sessionAttempts, dailyGoalMinutes }: { onNaviga
                 <div className="why-block">
                   <span className="detail-label"><Sparkles/> WHY THIS RECOMMENDATION?</span>
                   <p>{item.reason}</p>
+
+                  {/* AI Coach Recommendation Explanation */}
+                  {(() => {
+                    const recState = aiRecState[item.topicId]
+                    if (recState?.status === "loading") {
+                      return (
+                        <div className="ai-coach-box ai-coach-loading">
+                          <Sparkles className="spin-slow" />
+                          <span>AI Coach is generating personalized recommendation insights...</span>
+                        </div>
+                      )
+                    }
+                    if (recState?.status === "error") {
+                      return (
+                        <div className="ai-coach-box ai-coach-error">
+                          <div className="ai-coach-error-msg">{recState.error}</div>
+                          <button
+                            className="button button-secondary button-xs"
+                            onClick={() => handleRequestAiRec(item)}
+                          >
+                            <RotateCcw /> Retry
+                          </button>
+                        </div>
+                      )
+                    }
+                    if (recState?.status === "success" && recState.data) {
+                      return (
+                        <div className="ai-coach-box ai-coach-success">
+                          <div className="ai-coach-header">
+                            <span className="ai-coach-badge"><Sparkles /> AI COACH GUIDANCE</span>
+                            <span className="ai-coach-sub">Pedagogical Rationale</span>
+                          </div>
+                          <p className="ai-coach-explanation">{recState.data.explanation}</p>
+                        </div>
+                      )
+                    }
+                    return (
+                      <div style={{ marginTop: 8 }}>
+                        <button
+                          className="button-ai-coach"
+                          onClick={() => handleRequestAiRec(item)}
+                        >
+                          <Sparkles /> Ask Coach to Explain
+                        </button>
+                      </div>
+                    )
+                  })()}
                 </div>
+
+                {/* AI Targeted Practice Action */}
+                <div className="resource-row" style={{ marginTop: 8 }}>
+                  <div className="resource-icon" style={{ background: "#22d3ee18", color: "#22d3ee" }}><Sparkles/></div>
+                  <div>
+                    <b>AI Targeted Practice</b>
+                    <span>3 adaptive questions · Formative &amp; unscored</span>
+                  </div>
+                  <button
+                    className="button button-ai-coach"
+                    onClick={() => handleStartPractice(item.topicId, item.topicName, item.suggestedDifficulty)}
+                  >
+                    <Sparkles/> Generate Practice Questions
+                  </button>
+                </div>
+
                 {item.suggestedDifficulty && (
                   <div className="resource-row">
                     <div className="resource-icon"><Play/></div>
@@ -1358,6 +1641,285 @@ function StudyPlan({ onNavigate, sessionAttempts, dailyGoalMinutes }: { onNaviga
               </button>
             </div>
           ))}
+        </div>
+      </div>
+    )}
+
+    {/* AI Targeted Practice Interactive Experience */}
+    {practiceModal && (
+      <div
+        className="practice-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="practice-modal-title"
+      >
+        <div className="practice-modal">
+          <div className="practice-header">
+            <div>
+              <div className="practice-badge-row">
+                <span className="ai-coach-badge">
+                  <Sparkles /> AI LEARNING COACH
+                </span>
+                <span className="practice-unscored-tag">
+                  UNSCORED · FORMATIVE
+                </span>
+              </div>
+              <h3 id="practice-modal-title">
+                Targeted Practice: {practiceModal.topicName}
+              </h3>
+              <span
+                className="review-meta"
+                style={{ textTransform: "uppercase" }}
+              >
+                {practiceModal.difficulty} Level
+              </span>
+            </div>
+            <button
+              className="icon-btn"
+              aria-label="Close practice"
+              onClick={() => setPracticeModal(null)}
+            >
+              <X />
+            </button>
+          </div>
+
+          {practiceModal.status === "loading" && (
+            <div
+              className="ai-coach-box ai-coach-loading"
+              style={{ padding: "32px 16px", justifyContent: "center" }}
+            >
+              <Sparkles
+                className="spin-slow"
+                style={{ width: 18, height: 18 }}
+              />
+              <span style={{ fontSize: 11 }}>
+                AI Coach is generating 3 custom practice questions for{" "}
+                {practiceModal.topicName}...
+              </span>
+            </div>
+          )}
+
+          {practiceModal.status === "error" && (
+            <div className="ai-coach-box ai-coach-error" style={{ padding: 18 }}>
+              <div className="ai-coach-error-msg" style={{ fontSize: 11 }}>
+                {practiceModal.error}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  className="button button-secondary"
+                  onClick={() =>
+                    handleStartPractice(
+                      practiceModal.topicId,
+                      practiceModal.topicName,
+                      practiceModal.difficulty,
+                    )
+                  }
+                >
+                  <RotateCcw /> Retry
+                </button>
+                <button
+                  className="button button-quiet"
+                  onClick={() => setPracticeModal(null)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          )}
+
+          {practiceModal.status === "ready" &&
+            !practiceModal.isComplete &&
+            practiceModal.questions.length > 0 &&
+            (() => {
+              const curQ =
+                practiceModal.questions[practiceModal.currentIndex]
+              return (
+                <div className="practice-content">
+                  <div className="practice-progress-meta">
+                    <span>
+                      Question {practiceModal.currentIndex + 1} of{" "}
+                      {practiceModal.questions.length}
+                    </span>
+                    <span>
+                      Formative practice (not added to diagnostic score)
+                    </span>
+                  </div>
+
+                  <div className="practice-question-prompt">
+                    {curQ.prompt}
+                  </div>
+
+                  <div className="practice-options-list">
+                    {curQ.options.map((opt, oIdx) => {
+                      let btnClass = "practice-option-btn"
+                      if (practiceModal.checked) {
+                        if (oIdx === curQ.correctIndex) {
+                          btnClass += " correct"
+                        } else if (practiceModal.selectedOption === oIdx) {
+                          btnClass += " incorrect"
+                        }
+                      } else if (practiceModal.selectedOption === oIdx) {
+                        btnClass += " selected"
+                      }
+
+                      return (
+                        <button
+                          key={oIdx}
+                          className={btnClass}
+                          disabled={practiceModal.checked}
+                          onClick={() => {
+                            if (!practiceModal.checked) {
+                              setPracticeModal((prev) =>
+                                prev
+                                  ? { ...prev, selectedOption: oIdx }
+                                  : null,
+                              )
+                            }
+                          }}
+                        >
+                          <span className="practice-option-marker">
+                            {practiceModal.checked &&
+                            oIdx === curQ.correctIndex ? (
+                              <CheckCircle2
+                                style={{ width: 12, height: 12 }}
+                              />
+                            ) : practiceModal.checked &&
+                              practiceModal.selectedOption === oIdx ? (
+                              <CircleX style={{ width: 12, height: 12 }} />
+                            ) : (
+                              String.fromCharCode(65 + oIdx)
+                            )}
+                          </span>
+                          <span>{opt}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {practiceModal.checked && (
+                    <div className="practice-explanation-box">
+                      <strong>Explanation:</strong> {curQ.explanation}
+                    </div>
+                  )}
+
+                  <div className="practice-actions">
+                    <button
+                      className="button button-secondary"
+                      onClick={() => setPracticeModal(null)}
+                    >
+                      Exit Practice
+                    </button>
+
+                    {!practiceModal.checked ? (
+                      <button
+                        className="button button-primary"
+                        disabled={practiceModal.selectedOption === null}
+                        onClick={() => {
+                          if (practiceModal.selectedOption === null) return
+                          const isCorrect =
+                            practiceModal.selectedOption ===
+                            curQ.correctIndex
+                          setPracticeModal((prev) => {
+                            if (!prev) return null
+                            return {
+                              ...prev,
+                              checked: true,
+                              userAnswers: [
+                                ...prev.userAnswers,
+                                {
+                                  selectedOption: prev.selectedOption!,
+                                  isCorrect,
+                                },
+                              ],
+                            }
+                          })
+                        }}
+                      >
+                        Check Answer
+                      </button>
+                    ) : practiceModal.currentIndex <
+                      practiceModal.questions.length - 1 ? (
+                      <button
+                        className="button button-primary"
+                        onClick={() => {
+                          setPracticeModal((prev) => {
+                            if (!prev) return null
+                            return {
+                              ...prev,
+                              currentIndex: prev.currentIndex + 1,
+                              selectedOption: null,
+                              checked: false,
+                            }
+                          })
+                        }}
+                      >
+                        Next Question <ArrowRight />
+                      </button>
+                    ) : (
+                      <button
+                        className="button button-primary"
+                        onClick={() => {
+                          setPracticeModal((prev) =>
+                            prev ? { ...prev, isComplete: true } : null,
+                          )
+                        }}
+                      >
+                        Finish Session <Check />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
+
+          {practiceModal.status === "ready" &&
+            practiceModal.isComplete && (
+              <div className="practice-summary-card">
+                <div className="practice-summary-icon">
+                  <Sparkles />
+                </div>
+                <h4>Practice Session Complete!</h4>
+                <div className="practice-summary-score">
+                  {
+                    practiceModal.userAnswers.filter((a) => a.isCorrect)
+                      .length
+                  }{" "}
+                  of {practiceModal.questions.length} Correct
+                </div>
+                <p>
+                  Well done! Targeted practice reinforces conceptual
+                  understanding. This formative session was unscored and
+                  leaves your official assessment history intact.
+                </p>
+                <div
+                  className="practice-actions"
+                  style={{
+                    justifyContent: "center",
+                    width: "100%",
+                    marginTop: 8,
+                  }}
+                >
+                  <button
+                    className="button button-secondary"
+                    onClick={() =>
+                      handleStartPractice(
+                        practiceModal.topicId,
+                        practiceModal.topicName,
+                        practiceModal.difficulty,
+                      )
+                    }
+                  >
+                    <RotateCcw /> Practice More Questions
+                  </button>
+                  <button
+                    className="button button-primary"
+                    onClick={() => setPracticeModal(null)}
+                  >
+                    Back to Study Plan
+                  </button>
+                </div>
+              </div>
+            )}
         </div>
       </div>
     )}

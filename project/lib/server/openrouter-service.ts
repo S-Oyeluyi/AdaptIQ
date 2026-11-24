@@ -6,7 +6,8 @@ const OPENROUTER_CHAT_COMPLETIONS_URL =
 export const DEFAULT_OPENROUTER_MODEL = "openrouter/free"
 export const DEFAULT_OPENROUTER_TIMEOUT_MS = 45_000
 export const MAX_OPENROUTER_TIMEOUT_MS = 60_000
-export const MAX_OPENROUTER_OUTPUT_TOKENS = 1024
+export const DEFAULT_OPENROUTER_OUTPUT_TOKENS = 1024
+export const MAX_OPENROUTER_OUTPUT_TOKENS = 4096
 const MAX_PROMPT_CHARACTERS = 10_000
 
 export type OpenRouterServiceErrorCode =
@@ -99,6 +100,7 @@ export interface OpenRouterGenerationOptions {
   generator?: OpenRouterTextGenerator
   fetcher?: typeof fetch
   timeoutMs?: number
+  maxOutputTokens?: number
   logger?: OpenRouterDiagnosticsLogger
 }
 
@@ -724,6 +726,19 @@ export async function generateOpenRouterText(
     )
   }
 
+  const maxOutputTokens =
+    options.maxOutputTokens ?? DEFAULT_OPENROUTER_OUTPUT_TOKENS
+  if (
+    !Number.isInteger(maxOutputTokens) ||
+    maxOutputTokens < 1 ||
+    maxOutputTokens > MAX_OPENROUTER_OUTPUT_TOKENS
+  ) {
+    throw createInvalidInputError(
+      `Output token limit must be between 1 and ${MAX_OPENROUTER_OUTPUT_TOKENS}.`,
+      options,
+    )
+  }
+
   const model = getModelIdentifier()
   const generator =
     options.generator ??
@@ -739,7 +754,7 @@ export async function generateOpenRouterText(
         generator({
           model,
           prompt: normalizedPrompt,
-          maxOutputTokens: MAX_OPENROUTER_OUTPUT_TOKENS,
+          maxOutputTokens,
           timeoutMs,
         }),
       timeoutMs + 2_000,
