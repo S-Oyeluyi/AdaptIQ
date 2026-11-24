@@ -1,6 +1,8 @@
 import assert from "node:assert/strict"
 import {
+  DEFAULT_OPENROUTER_OUTPUT_TOKENS,
   DEFAULT_OPENROUTER_MODEL,
+  MAX_OPENROUTER_OUTPUT_TOKENS,
   OpenRouterServiceError,
   generateOpenRouterText,
   type OpenRouterDiagnosticsLogger,
@@ -143,9 +145,20 @@ async function runOpenRouterServiceTests(): Promise<void> {
     assert.deepEqual(capturedGenerationRequest, {
       model: "openrouter/test-alias",
       prompt: "SENSITIVE_PROMPT",
-      maxOutputTokens: 1024,
+      maxOutputTokens: DEFAULT_OPENROUTER_OUTPUT_TOKENS,
       timeoutMs: 45_000,
     })
+
+    let capturedLargeOutputLimit: number | undefined
+    await generateOpenRouterText("A bounded output test", {
+      maxOutputTokens: MAX_OPENROUTER_OUTPUT_TOKENS,
+      generator: async (request) => {
+        capturedLargeOutputLimit = request.maxOutputTokens
+        return { text: "ok" }
+      },
+      logger: () => {},
+    })
+    assert.equal(capturedLargeOutputLimit, MAX_OPENROUTER_OUTPUT_TOKENS)
 
     const invalidInputEvents: DiagnosticEvent[] = []
     let invalidInputGeneratorCalled = false

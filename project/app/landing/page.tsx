@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 }
 
 export default function LandingPage() {
-  return <AdaptIQLanding getStartedHref="/" />
+  return <AdaptIQLanding getStartedHref="/dashboard" />
 }

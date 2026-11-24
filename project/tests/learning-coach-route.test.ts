@@ -10,11 +10,16 @@ import {
   InMemoryRateLimiter,
   MAX_REQUEST_BODY_BYTES,
   extractJson,
+  getEffectiveAiProvider,
 } from "../lib/server/learning-coach-handler"
 import {
   OpenRouterServiceError,
   type OpenRouterTextGenerator,
 } from "../lib/server/openrouter-service"
+import {
+  GroqServiceError,
+  type GroqTextGenerator,
+} from "../lib/server/groq-service"
 
 function createJsonRequest(
   body: unknown,
@@ -560,6 +565,396 @@ async function runLearningCoachRouteTests(): Promise<void> {
     assert.equal(postResponse.status, 400)
     const postData = await postResponse.json()
     assert.ok(postData.error.includes("Invalid JSON"))
+  }
+
+  // 15. Transient retry on upstream provider failure
+  console.log("[15] Testing transient retry on upstream provider failure...")
+  {
+    let callCount = 0
+    const retryGenerator: OpenRouterTextGenerator = async () => {
+      callCount++
+      if (callCount === 1) {
+        throw new OpenRouterServiceError("api-failure", "Temporary provider glitch")
+      }
+      return {
+        text: JSON.stringify({
+          explanation: "Linear Equations are essential and now recovered on retry.",
+        }),
+      }
+    }
+
+    const request = createJsonRequest({
+      task: "recommendation-explanation",
+      topicId: topic.id,
+      kind: "focus",
+      reason: "Needs practice.",
+      action: "Review.",
+      suggestedDifficulty: "core",
+      suggestedMinutes: 10,
+    })
+
+    const response = await handleLearningCoachRequest(request, {
+      generator: retryGenerator,
+      rateLimiter: null,
+    })
+
+    assert.equal(response.status, 200)
+    assert.equal(callCount, 2)
+    const data = await response.json()
+    assert.ok(data.explanation.includes("recovered on retry"))
+  }
+
+  // 16. Transient retry on unparseable response
+  console.log("[16] Testing transient retry on unparseable JSON response...")
+  {
+    let callCount = 0
+    const unparseableRetryGenerator: OpenRouterTextGenerator = async () => {
+      callCount++
+      if (callCount === 1) {
+        return { text: "Some raw internal monologue that is not JSON" }
+      }
+      return {
+        text: JSON.stringify({
+          explanation: "Valid JSON produced on the second attempt.",
+        }),
+      }
+    }
+
+    const request = createJsonRequest({
+      task: "recommendation-explanation",
+      topicId: topic.id,
+      kind: "focus",
+      reason: "Needs practice.",
+      action: "Review.",
+      suggestedDifficulty: "core",
+      suggestedMinutes: 10,
+    })
+
+    const response = await handleLearningCoachRequest(request, {
+      generator: unparseableRetryGenerator,
+      rateLimiter: null,
+    })
+
+    assert.equal(response.status, 200)
+    assert.equal(callCount, 2)
+    const data = await response.json()
+    assert.ok(data.explanation.includes("second attempt"))
+  }
+
+  // 17. Provider 429 quota/rate limit error handling
+  console.log("[17] Testing provider 429 quota/rate limit error mapping...")
+  {
+    const rateLimitGenerator: OpenRouterTextGenerator = async () => {
+      throw new OpenRouterServiceError("api-failure", "Rate limit exceeded", {
+        model: "openrouter/free",
+        elapsedMs: 50,
+        providerStatus: 429,
+        providerErrorCode: "429",
+        providerMessage: "Provider rate limit or quota reached.",
+        upstreamProvider: null,
+        upstreamStatus: null,
+        classification: "quota-or-rate-limit",
+        errorCode: "api-failure",
+      })
+    }
+
+    const request = createJsonRequest({
+      task: "recommendation-explanation",
+      topicId: topic.id,
+      kind: "focus",
+      reason: "Needs practice.",
+      action: "Review.",
+      suggestedDifficulty: "core",
+      suggestedMinutes: 10,
+    })
+
+    const response = await handleLearningCoachRequest(request, {
+      generator: rateLimitGenerator,
+      rateLimiter: null,
+    })
+
+    assert.equal(response.status, 429)
+    const data = await response.json()
+    assert.ok(data.error.includes("rate limit reached"))
+  }
+
+  // 18. Testing <think> block stripping in JSON extraction
+  console.log("[18] Testing <think> reasoning block stripping...")
+  {
+    const textWithThinkBlock = `<think>
+Let's consider why the student got this wrong.
+The student probably confused addition and subtraction.
+</think>
+\`\`\`json
+{
+  "explanation": "Extracted despite reasoning tokens.",
+  "nextStep": "Practice inverse operations."
+}
+\`\`\``
+    const parsed = extractJson(textWithThinkBlock) as { explanation: string; nextStep: string }
+    assert.equal(parsed.explanation, "Extracted despite reasoning tokens.")
+    assert.equal(parsed.nextStep, "Practice inverse operations.")
+  }
+
+  // 19. Provider selection logic: getEffectiveAiProvider
+  console.log("[19] Testing provider selection resolution...")
+  {
+    assert.equal(getEffectiveAiProvider("groq"), "groq")
+    assert.equal(getEffectiveAiProvider("GROQ"), "groq")
+    assert.equal(getEffectiveAiProvider("openrouter"), "openrouter")
+    assert.equal(getEffectiveAiProvider("OPENROUTER"), "openrouter")
+    assert.equal(getEffectiveAiProvider(""), "openrouter")
+    assert.equal(getEffectiveAiProvider("unknown-provider"), "openrouter")
+    assert.equal(getEffectiveAiProvider(undefined), "openrouter")
+
+    const prevAiProvider = process.env.AI_PROVIDER
+    try {
+      process.env.AI_PROVIDER = "groq"
+      assert.equal(getEffectiveAiProvider(), "groq")
+
+      process.env.AI_PROVIDER = "openrouter"
+      assert.equal(getEffectiveAiProvider(), "openrouter")
+
+      delete process.env.AI_PROVIDER
+      assert.equal(getEffectiveAiProvider(), "openrouter")
+    } finally {
+      if (prevAiProvider !== undefined) {
+        process.env.AI_PROVIDER = prevAiProvider
+      } else {
+        delete process.env.AI_PROVIDER
+      }
+    }
+  }
+
+  // 20. Explicit Groq provider selection execution
+  console.log("[20] Testing explicit Groq selection execution...")
+  {
+    let groqGeneratorCalled = false
+    const mockGroqGenerator: GroqTextGenerator = async (req) => {
+      groqGeneratorCalled = true
+      return {
+        text: JSON.stringify({
+          explanation: "Groq explanation verified.",
+          nextStep: "Continue practice.",
+        }),
+        model: req.model,
+        providerStatus: 200,
+      }
+    }
+
+    const prevAiProvider = process.env.AI_PROVIDER
+    try {
+      process.env.AI_PROVIDER = "groq"
+      const request = createJsonRequest({
+        task: "mistake-explanation",
+        assessmentId: assessment.id,
+        questionId: question.id,
+        selectedOptionIndex: incorrectOptionIndex,
+      })
+
+      const response = await handleLearningCoachRequest(request, {
+        generator: mockGroqGenerator,
+        rateLimiter: null,
+      })
+
+      assert.equal(response.status, 200)
+      assert.equal(groqGeneratorCalled, true)
+      const data = await response.json()
+      assert.equal(data.explanation, "Groq explanation verified.")
+      assert.equal(data.nextStep, "Continue practice.")
+    } finally {
+      if (prevAiProvider !== undefined) {
+        process.env.AI_PROVIDER = prevAiProvider
+      } else {
+        delete process.env.AI_PROVIDER
+      }
+    }
+  }
+
+  // 21. Explicit OpenRouter provider selection execution
+  console.log("[21] Testing explicit OpenRouter selection execution...")
+  {
+    let openRouterGeneratorCalled = false
+    const mockOrGenerator: OpenRouterTextGenerator = async (req) => {
+      openRouterGeneratorCalled = true
+      return {
+        text: JSON.stringify({
+          explanation: "OpenRouter explanation verified.",
+          nextStep: "Continue practice.",
+        }),
+        model: req.model,
+        providerStatus: 200,
+      }
+    }
+
+    const prevAiProvider = process.env.AI_PROVIDER
+    try {
+      process.env.AI_PROVIDER = "openrouter"
+      const request = createJsonRequest({
+        task: "mistake-explanation",
+        assessmentId: assessment.id,
+        questionId: question.id,
+        selectedOptionIndex: incorrectOptionIndex,
+      })
+
+      const response = await handleLearningCoachRequest(request, {
+        generator: mockOrGenerator,
+        rateLimiter: null,
+      })
+
+      assert.equal(response.status, 200)
+      assert.equal(openRouterGeneratorCalled, true)
+      const data = await response.json()
+      assert.equal(data.explanation, "OpenRouter explanation verified.")
+    } finally {
+      if (prevAiProvider !== undefined) {
+        process.env.AI_PROVIDER = prevAiProvider
+      } else {
+        delete process.env.AI_PROVIDER
+      }
+    }
+  }
+
+  // 22. Default OpenRouter selection when AI_PROVIDER is unset
+  console.log("[22] Testing default OpenRouter selection when AI_PROVIDER is unset...")
+  {
+    let defaultGeneratorCalled = false
+    const mockDefaultGenerator: OpenRouterTextGenerator = async () => {
+      defaultGeneratorCalled = true
+      return {
+        text: JSON.stringify({
+          explanation: "Default provider explanation verified.",
+          nextStep: "Continue practice.",
+        }),
+        providerStatus: 200,
+      }
+    }
+
+    const prevAiProvider = process.env.AI_PROVIDER
+    try {
+      delete process.env.AI_PROVIDER
+      const request = createJsonRequest({
+        task: "mistake-explanation",
+        assessmentId: assessment.id,
+        questionId: question.id,
+        selectedOptionIndex: incorrectOptionIndex,
+      })
+
+      const response = await handleLearningCoachRequest(request, {
+        generator: mockDefaultGenerator,
+        rateLimiter: null,
+      })
+
+      assert.equal(response.status, 200)
+      assert.equal(defaultGeneratorCalled, true)
+      const data = await response.json()
+      assert.equal(data.explanation, "Default provider explanation verified.")
+    } finally {
+      if (prevAiProvider !== undefined) {
+        process.env.AI_PROVIDER = prevAiProvider
+      } else {
+        delete process.env.AI_PROVIDER
+      }
+    }
+  }
+
+  // 23. Groq provider error handling
+  console.log("[23] Testing Groq provider error handling (missing key, rate limit, timeout, failure)...")
+  {
+    const prevAiProvider = process.env.AI_PROVIDER
+    try {
+      process.env.AI_PROVIDER = "groq"
+
+      // Missing API key -> 503
+      const missingKeyReq = createJsonRequest({
+        task: "recommendation-explanation",
+        topicId: topic.id,
+        kind: "focus",
+        reason: "Needs practice.",
+        action: "Review.",
+        suggestedDifficulty: "core",
+        suggestedMinutes: 10,
+      })
+      const missingKeyRes = await handleLearningCoachRequest(missingKeyReq, {
+        generator: async () => {
+          throw new GroqServiceError("missing-api-key", "GROQ_API_KEY is not configured.")
+        },
+        rateLimiter: null,
+      })
+      assert.equal(missingKeyRes.status, 503)
+
+      // Rate limit (429) -> 429
+      const rateLimitReq = createJsonRequest({
+        task: "recommendation-explanation",
+        topicId: topic.id,
+        kind: "focus",
+        reason: "Needs practice.",
+        action: "Review.",
+        suggestedDifficulty: "core",
+        suggestedMinutes: 10,
+      })
+      const rateLimitRes = await handleLearningCoachRequest(rateLimitReq, {
+        generator: async () => {
+          throw new GroqServiceError("api-failure", "Rate limit exceeded", {
+            model: "openai/gpt-oss-120b",
+            elapsedMs: 50,
+            providerStatus: 429,
+            providerErrorCode: "429",
+            providerMessage: "Provider rate limit reached.",
+            classification: "quota-or-rate-limit",
+            errorCode: "api-failure",
+          })
+        },
+        rateLimiter: null,
+      })
+      assert.equal(rateLimitRes.status, 429)
+      const rateLimitData = await rateLimitRes.json()
+      assert.ok(rateLimitData.error.includes("rate limit reached"))
+
+      // Timeout -> 504
+      const timeoutReq = createJsonRequest({
+        task: "recommendation-explanation",
+        topicId: topic.id,
+        kind: "focus",
+        reason: "Needs practice.",
+        action: "Review.",
+        suggestedDifficulty: "core",
+        suggestedMinutes: 10,
+      })
+      const timeoutRes = await handleLearningCoachRequest(timeoutReq, {
+        generator: async () => {
+          throw new GroqServiceError("timeout", "Groq request timed out")
+        },
+        rateLimiter: null,
+      })
+      assert.equal(timeoutRes.status, 504)
+
+      // API failure -> 502
+      const failureReq = createJsonRequest({
+        task: "recommendation-explanation",
+        topicId: topic.id,
+        kind: "focus",
+        reason: "Needs practice.",
+        action: "Review.",
+        suggestedDifficulty: "core",
+        suggestedMinutes: 10,
+      })
+      const failureRes = await handleLearningCoachRequest(failureReq, {
+        generator: async () => {
+          throw new GroqServiceError("api-failure", "Upstream server failure")
+        },
+        rateLimiter: null,
+      })
+      assert.equal(failureRes.status, 502)
+      const failureData = await failureRes.json()
+      assert.ok(failureData.error.includes("temporarily unavailable"))
+    } finally {
+      if (prevAiProvider !== undefined) {
+        process.env.AI_PROVIDER = prevAiProvider
+      } else {
+        delete process.env.AI_PROVIDER
+      }
+    }
   }
 
   console.log("=== ALL LEARNING COACH ROUTE TESTS PASSED SUCCESSFULLY ===")

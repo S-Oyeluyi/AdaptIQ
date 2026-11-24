@@ -3,7 +3,7 @@
  * Change this (or pass `getStartedHref` to <AdaptIQLanding />) when the
  * dashboard moves to a different route during integration.
  */
-export const DEFAULT_GET_STARTED_HREF = "/"
+export const DEFAULT_GET_STARTED_HREF = "/dashboard"
 
 export const NAV_LINKS = [
   { label: "Home", href: "#home" },
