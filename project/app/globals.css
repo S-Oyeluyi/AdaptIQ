@@ -472,7 +472,10 @@ button:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid
 .settings-field-error { color: #f3c25b; font-size: 8px; margin-top: 4px; display: block; }
 .settings-notification-note { color: #637485; font-size: 7.5px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #1e3042; }
 
-.coach-chat { display: flex; flex-direction: column; gap: 16px; min-width: 0; height: calc(100dvh - 172px); min-height: 430px; }
+.main-content:has(.coach-chat) { display: flex; flex-direction: column; height: calc(100dvh - 72px); min-height: 0; }
+.main-content:has(.coach-chat) > .coach-chat { flex: 1 1 0; height: auto; min-height: 0; }
+.main-content:has(.coach-chat) > .app-footer { flex: none; }
+.coach-chat { display: flex; flex-direction: column; gap: 16px; min-width: 0; min-height: 0; }
 .coach-chat-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .coach-chat-heading-copy { display: flex; flex-direction: column; gap: 6px; }
 .coach-chat-kicker { display: flex; align-items: center; gap: 8px; color: #c6d3df; font-size: 11px; font-weight: 600; }
@@ -481,7 +484,7 @@ button:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid
 .coach-new-chat { height: 34px; border-color: #2a3b4e; background: #101a28; color: #d9e5ef; font-size: 10px; }
 .coach-new-chat:hover { border-color: #22d3ee66; background: #142235; color: #f1f5f9; }
 .coach-chat-panel { position: relative; display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; border: 1px solid #1c3043; border-radius: 15px; background: radial-gradient(ellipse at 50% 0%, #12283a 0, transparent 48%), linear-gradient(150deg, #0d1725, #0b1420 75%); box-shadow: 0 16px 45px #03091232, inset 0 1px #ffffff05; }
-.coach-empty-state { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; padding: 28px 34px 20px; }
+.coach-empty-state { display: flex; flex: 1 1 0; min-height: 0; flex-direction: column; align-items: center; justify-content: center; overflow-y: auto; padding: 28px 34px 20px; }
 .coach-empty-orb { display: grid; width: 43px; height: 43px; place-items: center; margin-bottom: 17px; border: 1px solid #22d3ee35; border-radius: 14px; background: linear-gradient(145deg,#153345,#102032); color: #22d3ee; box-shadow: 0 0 26px #22d3ee12, inset 0 1px #ffffff0a; }
 .coach-empty-orb svg { width: 19px; height: 19px; }
 .coach-empty-copy { max-width: 530px; text-align: center; }
@@ -545,7 +548,8 @@ button:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid
 .coach-key-hint i { width: 2px; height: 2px; border-radius: 50%; background: #607488; }
 
 @media (max-width: 640px) {
-  .coach-chat { height: calc(100dvh - 142px); min-height: 470px; gap: 12px; }
+  .main-content:has(.coach-chat) { height: calc(100dvh - 64px); }
+  .coach-chat { gap: 12px; }
   .coach-chat-heading { align-items: flex-start; gap: 10px; }
   .coach-chat-heading-copy { gap: 4px; }
   .coach-chat-kicker { font-size: 9px; }
