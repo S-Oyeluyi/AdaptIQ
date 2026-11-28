@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import {
   BookOpenText,
   Bot,
+  Check,
   CircleHelp,
   ClipboardList,
   Copy,
@@ -59,67 +60,8 @@ const suggestions = [
   },
 ]
 
-function createMockResponse(prompt: string) {
-  const normalized = prompt.toLowerCase()
-
-  if (normalized.includes("practice") || normalized.includes("question")) {
-    return `Let’s practise probability. Try these one at a time:
-
-1. A fair coin is flipped. What is the probability of getting tails?
-2. A fair six-sided die is rolled. What is the probability of rolling an even number?
-3. A bag has 3 red and 2 blue counters. What is the probability of picking a blue counter?
-
-Start with question 1. Think about how many outcomes you want compared with the total number of equally likely outcomes.`
-  }
-
-  if (normalized.includes("solve") || normalized.includes("problem") || normalized.includes("break down") || normalized.includes("step by step")) {
-    return `Let’s solve **2x + 5 = 13** step by step.
-
-1. **Undo the +5.** Subtract 5 from both sides: 2x = 8.
-2. **Undo the multiplication by 2.** Divide both sides by 2: x = 4.
-3. **Check your answer.** Substitute 4 into the original equation: 2 × 4 + 5 = 13.
-
-So, **x = 4**. The key idea is to keep both sides balanced by doing the same operation to each.`
-  }
-
-  if (normalized.includes("photosynthesis")) {
-    return `**Photosynthesis** is how plants use light energy to make sugar (glucose) from water and carbon dioxide. Think of a leaf as a tiny solar-powered food factory.
-
-1. **Capture light:** Chlorophyll in the leaves absorbs energy from sunlight.
-2. **Take in the ingredients:** Roots absorb water, and leaves take in carbon dioxide from the air.
-3. **Make sugar:** The light energy helps turn water and carbon dioxide into glucose. Oxygen is released as a by-product.
-
-A simplified word equation is:
-
-\`\`\`text
-carbon dioxide + water + light energy → glucose + oxygen
-\`\`\`
-
-The plant uses glucose for energy and growth. Want to explore where each ingredient enters the plant?`
-  }
-
-  if (normalized.includes("quadratic") || normalized.includes("topic")) {
-    return `A **quadratic equation** is an equation where the highest power of the unknown is 2. Its graph makes a U-shaped curve called a parabola.
-
-A common form is:
-
-\`\`\`text
-ax² + bx + c = 0
-\`\`\`
-
-For example, x² − 5x + 6 = 0 is quadratic because the highest power of x is 2. You can often solve one by factoring: (x − 2)(x − 3) = 0, so x = 2 or x = 3.
-
-Would you like to try factoring one together?`
-  }
-
-  return `Let’s make the idea feel more manageable. Start by identifying the key pieces, then connect each one to something you already know.
-
-- **Name the idea:** What is the concept trying to describe?
-- **Find a simple example:** Use small, familiar numbers or a real-world situation.
-- **Explain it back:** Put the idea into your own words, then notice which part still feels unclear.
-
-Tell me the specific concept or subject you’re working on and I can tailor the explanation to it.`
-}
+const MAX_HISTORY_MESSAGES = 12
+const CHAT_ENDPOINT = "/api/learning/chat"
 
 function MessageText({ content }: { content: string }) {
   const lines = content.split("\n")
@@ -175,34 +117,139 @@ export function LearningCoachChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState("")
   const [isTyping, setIsTyping] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [copiedId, setCopiedId] = useState<number | null>(null)
   const nextId = useRef(0)
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => () => {
-    if (timer.current) clearTimeout(timer.current)
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = null
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
   }, [])
+
+  const requestAssistantReply = async (
+    conversation: ChatMessage[],
+    replaceMessageId?: number,
+  ) => {
+    if (abortControllerRef.current) return
+
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+    setIsTyping(true)
+    setErrorMessage(null)
+
+    try {
+      const recentMessages = conversation
+        .slice(-MAX_HISTORY_MESSAGES)
+        .map(({ role, content }) => ({ role, content }))
+
+      const response = await fetch(CHAT_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: recentMessages }),
+        signal: controller.signal,
+      })
+
+      let data: { reply?: unknown; error?: unknown } | null = null
+      try {
+        data = (await response.json()) as { reply?: unknown; error?: unknown }
+      } catch {
+        data = null
+      }
+
+      if (controller.signal.aborted) return
+
+      if (!response.ok) {
+        const serverError =
+          typeof data?.error === "string" && data.error.trim().length > 0
+            ? data.error
+            : "Unable to get a response from the Learning Coach. Please try again."
+        setErrorMessage(serverError)
+        return
+      }
+
+      if (typeof data?.reply !== "string" || data.reply.trim().length === 0) {
+        setErrorMessage("The Learning Coach returned an empty response. Please try again.")
+        return
+      }
+
+      const reply = data.reply
+      const newMessage: ChatMessage = {
+        id: nextId.current++,
+        role: "assistant",
+        content: reply,
+        time: formatTime(new Date()),
+      }
+
+      if (replaceMessageId !== undefined) {
+        // Regenerate: replace the target assistant message and drop everything after it.
+        // Only applied on success so the original conversation is preserved on failure.
+        setMessages((current) => {
+          const targetIndex = current.findIndex((m) => m.id === replaceMessageId)
+          if (targetIndex === -1) return [...current, newMessage]
+          return [...current.slice(0, targetIndex), newMessage]
+        })
+      } else {
+        setMessages((current) => [...current, newMessage])
+      }
+    } catch (error) {
+      if (controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) {
+        return
+      }
+      setErrorMessage("Network error while contacting the Learning Coach. Please check your connection and try again.")
+    } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null
+        setIsTyping(false)
+      }
+    }
+  }
 
   const sendMessage = (value: string) => {
     const content = value.trim()
-    if (!content || isTyping) return
+    if (!content || isTyping || abortControllerRef.current) return
 
-    const now = new Date()
-    setMessages((current) => [
-      ...current,
-      { id: nextId.current++, role: "user", content, time: formatTime(now) },
-    ])
+    const userMessage: ChatMessage = {
+      id: nextId.current++,
+      role: "user",
+      content,
+      time: formatTime(new Date()),
+    }
+    const updatedConversation = [...messages, userMessage]
+
+    setMessages(updatedConversation)
     setDraft("")
-    setIsTyping(true)
+    void requestAssistantReply(updatedConversation)
+  }
 
-    timer.current = setTimeout(() => {
-      setMessages((current) => [
-        ...current,
-        { id: nextId.current++, role: "assistant", content: createMockResponse(content), time: formatTime(new Date()) },
-      ])
-      setIsTyping(false)
-      timer.current = null
-    }, 950)
+  const regenerateResponse = (assistantMessageId: number) => {
+    if (isTyping || abortControllerRef.current) return
+
+    const targetIndex = messages.findIndex(
+      (message) => message.id === assistantMessageId && message.role === "assistant",
+    )
+    if (targetIndex <= 0) return
+
+    // Pass the conversation up to (but not including) the target message,
+    // and the message ID so the response handler can replace it on success.
+    const conversationBeforeTarget = messages.slice(0, targetIndex)
+    void requestAssistantReply(conversationBeforeTarget, assistantMessageId)
+  }
+
+  const handleCopy = async (message: ChatMessage) => {
+    try {
+      await navigator.clipboard.writeText(message.content)
+      setCopiedId(message.id)
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+      copyTimerRef.current = setTimeout(() => {
+        setCopiedId((current) => (current === message.id ? null : current))
+      }, 2000)
+    } catch {
+      setErrorMessage("Unable to copy message to clipboard.")
+    }
   }
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -218,10 +265,12 @@ export function LearningCoachChat() {
   }
 
   const newChat = () => {
-    if (timer.current) clearTimeout(timer.current)
-    timer.current = null
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = null
     setMessages([])
     setDraft("")
+    setErrorMessage(null)
+    setCopiedId(null)
     setIsTyping(false)
     textareaRef.current?.focus()
   }
@@ -278,8 +327,23 @@ export function LearningCoachChat() {
                           </Bubble>
                           {message.role === "assistant" && (
                             <div className="coach-message-actions" aria-label="Response actions">
-                              <button type="button" aria-label="Copy response" title="Copy response"><Copy aria-hidden="true" /></button>
-                              <button type="button" aria-label="Regenerate response" title="Regenerate response"><RefreshCw aria-hidden="true" /></button>
+                              <button
+                                type="button"
+                                aria-label={copiedId === message.id ? "Copied response" : "Copy response"}
+                                title={copiedId === message.id ? "Copied" : "Copy response"}
+                                onClick={() => void handleCopy(message)}
+                              >
+                                {copiedId === message.id ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+                              </button>
+                              <button
+                                type="button"
+                                aria-label="Regenerate response"
+                                title="Regenerate response"
+                                disabled={isTyping}
+                                onClick={() => regenerateResponse(message.id)}
+                              >
+                                <RefreshCw aria-hidden="true" />
+                              </button>
                             </div>
                           )}
                         </MessageContent>
@@ -304,6 +368,11 @@ export function LearningCoachChat() {
         )}
 
         <form className="coach-composer" onSubmit={submit}>
+          {errorMessage && (
+            <div className="eval-error-box" role="alert">
+              {errorMessage}
+            </div>
+          )}
           <label htmlFor="coach-prompt" className="sr-only">Ask your Learning Coach anything</label>
           <div className="coach-composer-box">
             <textarea

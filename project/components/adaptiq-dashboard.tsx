@@ -134,7 +134,13 @@ function Sidebar({ active, onChange, open, onClose, displayName }: { active: Sec
 
 function Header({ title, eyebrow, onMenu, displayName }: { title: string; eyebrow: string; onMenu: () => void; displayName: string }) {
   const [noticeOpen, setNoticeOpen] = useState(false)
-  return <header className="topbar"><div className="topbar-heading"><button className="icon-btn menu-trigger" onClick={onMenu} aria-label="Open navigation"><Menu/></button><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1></div></div><div className="top-actions"><div className="today-pill"><span className="live-dot"/> Learning session <span className="today-divider"/> Today, Nov 21</div><div className="notice-wrap"><button className="icon-btn notification-btn" aria-label="Notifications" aria-expanded={noticeOpen} onClick={() => setNoticeOpen(!noticeOpen)}><Bell/><i/></button>{noticeOpen && <div className="notice-pop"><div className="notice-title">You&apos;re all caught up</div><p>Your next study session is ready when you are.</p></div>}</div><button className="profile-button" onClick={() => window.dispatchEvent(new CustomEvent("adaptiq-nav", {detail: "settings"}))}><div className="avatar">{nameInitials(displayName)}</div><span>{displayName}</span><ChevronDown/></button></div></header>
+  const getFormattedDate = () => new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })
+  const [formattedDate, setFormattedDate] = useState(getFormattedDate)
+  useEffect(() => {
+    const interval = setInterval(() => setFormattedDate(getFormattedDate()), 60_000)
+    return () => clearInterval(interval)
+  }, [])
+  return <header className="topbar"><div className="topbar-heading"><button className="icon-btn menu-trigger" onClick={onMenu} aria-label="Open navigation"><Menu/></button><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1></div></div><div className="top-actions"><div className="today-pill"><span className="live-dot"/> Learning session <span className="today-divider"/> Today, {formattedDate}</div><div className="notice-wrap"><button className="icon-btn notification-btn" aria-label="Notifications" aria-expanded={noticeOpen} onClick={() => setNoticeOpen(!noticeOpen)}><Bell/><i/></button>{noticeOpen && <div className="notice-pop"><div className="notice-title">You&apos;re all caught up</div><p>Your next study session is ready when you are.</p></div>}</div><button className="profile-button" onClick={() => window.dispatchEvent(new CustomEvent("adaptiq-nav", {detail: "settings"}))}><div className="avatar">{nameInitials(displayName)}</div><span>{displayName}</span><ChevronDown/></button></div></header>
 }
 
 function SectionTitle({ eyebrow, title, description, action }: { eyebrow: string; title: string; description: string; action?: React.ReactNode }) {
