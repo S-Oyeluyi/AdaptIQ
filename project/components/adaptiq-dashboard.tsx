@@ -5,7 +5,7 @@ import Link from "next/link"
 import {
   Activity, ArrowDownRight, ArrowRight, ArrowUpRight, Atom, Bell, BrainCircuit,
   CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight,
-  CircleHelp, CircleX, Clock3, Command, Compass, Flame, FlaskConical, Focus, Gauge,
+  CircleHelp, CircleX, Clock3, Command, Compass, Flame, FlaskConical, Focus, Gauge, MessageCircle,
   GraduationCap, HelpCircle, LayoutDashboard, Lightbulb, LockKeyhole, LogOut, Menu, MoreHorizontal,
   Play, Plus, RotateCcw, Search, Settings, ShieldCheck, Sparkles, Target, TrendingUp, Trophy,
   UserRound, X, Zap,
@@ -68,8 +68,9 @@ import type {
   MistakeExplanationResponse,
   RecommendationExplanationResponse,
 } from "@/lib/learning-ai-schemas"
+import { LearningCoachChat } from "@/components/learning-coach-chat"
 
-type Section = "overview" | "assessments" | "cognitive-fingerprint" | "study-plan" | "progress" | "settings"
+type Section = "overview" | "assessments" | "cognitive-fingerprint" | "study-plan" | "progress" | "ai-learning-coach" | "settings"
 type NavTarget = Section | "Overview" | "Assessments" | "Cognitive Fingerprint" | "Study Plan" | "Adaptive Study Plan" | "Progress" | "Progress Analytics" | "Settings"
 
 /** Derive up to 2 uppercase initials from a display name. */
@@ -92,6 +93,7 @@ function toSectionId(val: string): Section {
   if (normalized === "cognitive-fingerprint") return "cognitive-fingerprint"
   if (normalized === "study-plan" || normalized === "adaptive-study-plan") return "study-plan"
   if (normalized === "progress" || normalized === "progress-analytics") return "progress"
+  if (normalized === "ai-learning-coach" || normalized === "learning-coach") return "ai-learning-coach"
   if (normalized === "settings") return "settings"
   return "overview"
 }
@@ -102,6 +104,7 @@ const navItems: { id: Section; label: string; icon: typeof LayoutDashboard }[] =
   { id: "cognitive-fingerprint", label: "Cognitive Fingerprint", icon: BrainCircuit },
   { id: "study-plan", label: "Study Plan", icon: Compass },
   { id: "progress", label: "Progress", icon: TrendingUp },
+  { id: "ai-learning-coach", label: "AI Learning Coach", icon: MessageCircle },
   { id: "settings", label: "Settings", icon: Settings },
 ]
 
@@ -2488,6 +2491,7 @@ export default function AdaptIQDashboard() {
     "cognitive-fingerprint": { title: "Cognitive Fingerprint", eyebrow: "ADAPTIQ LEARNING SPACE" },
     "study-plan": { title: "Study Plan", eyebrow: "ADAPTIQ LEARNING SPACE" },
     "progress": { title: "Progress", eyebrow: "ADAPTIQ LEARNING SPACE" },
+    "ai-learning-coach": { title: "AI Learning Coach", eyebrow: "YOUR PERSONAL AI TUTOR" },
     "settings": { title: "Settings", eyebrow: "ADAPTIQ LEARNING SPACE" },
   }
 
@@ -2546,6 +2550,7 @@ export default function AdaptIQDashboard() {
               {active === "cognitive-fingerprint" && <Fingerprint onNavigate={handleNavigate} sessionAttempts={sessionAttempts}/>}
               {active === "study-plan" && <StudyPlan onNavigate={handleNavigate} sessionAttempts={sessionAttempts} dailyGoalMinutes={userPreferences.dailyStudyGoalMinutes}/>}
               {active === "progress" && <Progress onNavigate={handleNavigate} sessionAttempts={sessionAttempts}/>}
+              {active === "ai-learning-coach" && <LearningCoachChat />}
               {active === "settings" && (
                 <SettingsPage
                   preferences={userPreferences}
